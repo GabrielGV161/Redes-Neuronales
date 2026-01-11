@@ -18,3 +18,8 @@ fortaleciendo conexiones sinápticas que responden a secuencias particulares
 de impulsos y debilitando otras.
 
 ## Instalación
+- Clona el repositorio.
+- Instala las dependencias:
+   ```bash
+   pip install -r requirements.txt
+   

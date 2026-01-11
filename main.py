@@ -47,7 +47,7 @@ if __name__ == '__main__':
     # En el main, cambia la llamada a plot_results:
     plot_results(objs, pattern_size=TAMANO_PATRON, 
              max_neurons_voltage=5,
-             target_output_weights=0,weight_plot_mode="average",
+             target_output_weights=0,weight_plot_mode="heatmap",
              duration_ms=DURACION/b2.ms)  # ⭐ Solo sinapsis hacia Output 0
     # ⭐ VERIFICACIÓN DE DEBUG
     print(f"Spikes generados: {len(indices)}")

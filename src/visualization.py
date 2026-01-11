@@ -15,189 +15,151 @@ def plot_results(d, pattern_size=3, max_neurons_voltage=5,
                  weight_plot_mode='average',
                  duration_ms=None):
     """
-    weight_plot_mode: 'single', 'average', o 'heatmap'
+    Weight plot mode = ('single','average' or 'heatmap')
     """
+    
     mon_in = d['mon_in']
     mon_out = d['mon_out']
     mon_v = d['mon_v']
     mon_w = d['mon_w']
-    synapses = d['synapses']  # ⭐ Necesitamos acceso a las sinapsis
+    synapses = d['synapses'] 
     
     if duration_ms is None:
         duration_ms = float(mon_in.t[-1] / b2.ms)
         
-    # Detectar configuración
     n_output = mon_v.v.shape[0]
     n_synapses = len(synapses)
     
-    # ⭐ OBTENER MAPEO REAL DE CONEXIONES
-    # synapses.i = índices de neuronas pre-sinápticas (input)
-    # synapses.j = índices de neuronas post-sinápticas (output)
-    pre_indices = synapses.i[:]  # Array con las neuronas input conectadas
-    post_indices = synapses.j[:] # Array con las neuronas output conectadas
+    # Extraemos índices como arrays de Numpy (rápido)
+    pre_indices = synapses.i[:]
+    post_indices = synapses.j[:]
     
-    plt.figure(figsize=(14, 12))
+    # --- PREPARACIÓN DE MATRIZ DE PESOS (VECTORIZADA) ---
+    # Convertimos TODO a una matriz pura de numpy de una sola vez.
+    # Esto evita acceder a la memoria de Brian2 repetidamente.
+    # Forma: (n_sinapsis, n_tiempos)
+    all_weights_matrix = mon_w.w / b2.mV
     
-   
+    # Máscaras booleanas (True/False) para identificar tipos
+    is_pattern_synapse = pre_indices < pattern_size
+    
+    # --- INICIO DE GRÁFICOS ---
+    # sharex=True permite que el zoom se aplique a todas las gráficas a la vez
+    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(14, 12), sharex=True)
+    
     # 1. Raster Plot - INPUT
-    plt.subplot(4, 1, 1)  # <--- IMPORTANTE: Índice 1 (arriba del todo)
-    
-    # Graficamos los datos de entrada (mon_in), no los de salida
-    plt.plot(mon_in.t/b2.ms, mon_in.i, '.k', ms=2, alpha=0.6) 
-    
-    # Línea divisoria visual entre patrón y ruido
-    plt.axhline(pattern_size - 0.5, color='blue', linestyle='--', alpha=0.3)
-    plt.text(0, pattern_size + 2, 'Ruido', color='blue', fontsize=8)
-    plt.text(0, 1, 'Patrón', color='green', fontsize=8)
-    
-    plt.title('Raster Plot (Input)', fontsize=12, fontweight='bold')
-    plt.ylabel('Neurona ID')
-    plt.xlim(0, duration_ms)
-    
+    ax1.plot(mon_in.t/b2.ms, mon_in.i, '.k', ms=2, alpha=0.6)
+    ax1.axhline(pattern_size - 0.5, color='blue', linestyle='--', alpha=0.3)
+    ax1.text(0, pattern_size + 2, 'Ruido', color='blue', fontsize=9)
+    ax1.text(0, 1, 'Patrón', color='green', fontsize=9)
+    ax1.set_title('Raster Plot (Input)', fontsize=10, fontweight='bold')
+    ax1.set_ylabel('Neurona ID')
     
     # 2. Raster Plot - OUTPUT
-    plt.subplot(4, 1, 2)
-    
-    # Verificamos si hay datos antes de graficar
     if len(mon_out.t) > 0:
-        plt.plot(mon_out.t/b2.ms, mon_out.i, '|r', ms=20, mew=2)
-        plt.ylim(-0.5, n_output - 0.5)
+        ax2.plot(mon_out.t/b2.ms, mon_out.i, '|r', ms=20, mew=2)
+        ax2.set_ylim(-0.5, n_output - 0.5)
         n_spikes = len(mon_out.t)
     else:
         n_spikes = 0
-        
-    plt.title(f'Output Spikes ({n_output} neuronas, {n_spikes} spikes totales)', 
-              fontsize=12, fontweight='bold')
-    plt.ylabel('Neurona ID')
-    plt.xlim(0, duration_ms)  # ⭐ Ajustar automáticamente
+    ax2.set_title(f'Output Spikes ({n_spikes} total)', fontsize=10, fontweight='bold')
+    ax2.set_ylabel('Neurona ID')
+
     # 3. Voltaje
-    plt.subplot(4, 1, 3)
     n_to_plot = min(max_neurons_voltage, n_output)
+    # Aquí usamos un bucle pequeño porque graficamos pocas líneas (5 max)
     for neuron_idx in range(n_to_plot):
-        plt.plot(mon_v.t/b2.ms, mon_v.v[neuron_idx]/b2.mV, 
-                alpha=0.7, linewidth=1.5)
-    plt.axhline(-54, color='r', linestyle='--', linewidth=2, alpha=0.5, label='Umbral')
-    
-    v_min = np.min(mon_v.v[:] / b2.mV)
-    v_max = np.max(mon_v.v[:] / b2.mV)
-    plt.title(f'Voltaje de Membrana ({n_to_plot}/{n_output} neuronas, rango: {v_min:.1f} a {v_max:.1f} mV)', 
-              fontsize=12, fontweight='bold')
-    plt.ylabel('Voltaje (mV)')
-    plt.xlabel('Tiempo (ms)')
-    plt.xlim(0, duration_ms)  # ⭐ Ajustar automáticamente
-    plt.legend(loc='upper left')
-    plt.grid(True, alpha=0.3)
-    
-    
-    # 4. Evolución de Pesos (⭐ ADAPTADO PARA SPARSE)
-    plt.subplot(4, 1, 4)
+        ax3.plot(mon_v.t/b2.ms, mon_v.v[neuron_idx]/b2.mV, alpha=0.7, linewidth=1.5)
+    ax3.axhline(-54, color='r', linestyle='--', alpha=0.5, label='Umbral')
+    ax3.set_ylabel('Voltaje (mV)')
+    ax3.set_title('Voltaje de Membrana', fontsize=10, fontweight='bold')
+
+    # 4. Pesos (OPTIMIZADO)
     
     if weight_plot_mode == 'single':
-        # OPCIÓN A: Una neurona output
+        # --- MODO SINGLE VECTORIZADO ---
         target = target_output_weights if target_output_weights is not None else 0
-        pattern_count = 0
-        noise_count = 0
         
-        for syn_idx in range(n_synapses):
-            pre_neuron = pre_indices[syn_idx]
-            post_neuron = post_indices[syn_idx]
-            
-            if post_neuron != target:
-                continue
-            
-            if pre_neuron < pattern_size:
-                pattern_count += 1
-                plt.plot(mon_w.t/b2.ms, mon_w.w[syn_idx]/b2.mV, 
-                        'g-', linewidth=2, alpha=0.7)
-            else:
-                noise_count += 1
-                plt.plot(mon_w.t/b2.ms, mon_w.w[syn_idx]/b2.mV, 
-                        'k-', linewidth=0.5, alpha=0.3)
+        # 1. Filtramos solo las sinapsis que conectan con nuestro target
+        # Esto crea una máscara booleana instantánea
+        mask_target = post_indices == target
         
-        plt.plot([], [], 'g-', linewidth=2, label=f'Patrón ({pattern_count})')
-        plt.plot([], [], 'k-', linewidth=1, label=f'Ruido ({noise_count})')
-        plt.title(f'Pesos hacia Output {target}', fontsize=12, fontweight='bold')
-    
+        # 2. Extraemos los pesos y los tipos (patrón/ruido) usando la máscara
+        weights_target = all_weights_matrix[mask_target]
+        types_target = is_pattern_synapse[mask_target] # True si es patrón, False si es ruido
+        
+        # 3. Graficamos
+        # Matplotlib necesita un bucle para graficar líneas individuales con colores distintos,
+        # pero ya hemos filtrado los datos, así que el bucle es corto.
+        time_array = mon_w.t/b2.ms
+        
+        # Separamos para graficar en bloque (más rápido que ir línea a línea)
+        # Transponemos (.T) para que plot entienda que las columnas son series temporales
+        if np.any(types_target):
+            ax4.plot(time_array, weights_target[types_target].T, 'g-', alpha=0.7, linewidth=1.5)
+            
+        if np.any(~types_target): # ~ es NOT (lo contrario de True)
+            ax4.plot(time_array, weights_target[~types_target].T, 'k-', alpha=0.1, linewidth=0.5)
+            
+        # Líneas fantasma para la leyenda
+        ax4.plot([], [], 'g-', linewidth=2, label='Patrón')
+        ax4.plot([], [], 'k-', linewidth=1, label='Ruido')
+        ax4.set_title(f'Pesos hacia Output {target}', fontsize=10, fontweight='bold')
+
     elif weight_plot_mode == 'average':
-        # OPCIÓN B: Promedios
-        pattern_weights = []
-        noise_weights = []
-        
-        for syn_idx in range(n_synapses):
-            pre_neuron = pre_indices[syn_idx]
+        # --- MODO AVERAGE VECTORIZADO ---
+        if np.any(is_pattern_synapse):
+            mean_pattern = np.mean(all_weights_matrix[is_pattern_synapse], axis=0)
+            std_pattern = np.std(all_weights_matrix[is_pattern_synapse], axis=0)
             
-            if pre_neuron < pattern_size:
-                pattern_weights.append(mon_w.w[syn_idx])
-            else:
-                noise_weights.append(mon_w.w[syn_idx])
-        
-        if len(pattern_weights) > 0:
-            pattern_weights = np.array(pattern_weights)
-            mean_pattern = np.mean(pattern_weights, axis=0)
-            std_pattern = np.std(pattern_weights, axis=0)
+            ax4.plot(mon_w.t/b2.ms, mean_pattern, 'g-', linewidth=3, label='Patrón (μ)')
+            ax4.fill_between(mon_w.t/b2.ms, 
+                             mean_pattern - std_pattern,
+                             mean_pattern + std_pattern, color='green', alpha=0.2)
             
-            plt.plot(mon_w.t/b2.ms, mean_pattern/b2.mV, 
-                     'g-', linewidth=3, label=f'Patrón (μ de {len(pattern_weights)})')
-            plt.fill_between(mon_w.t/b2.ms, 
-                             (mean_pattern - std_pattern)/b2.mV,
-                             (mean_pattern + std_pattern)/b2.mV,
-                             color='green', alpha=0.2)
-        
-        if len(noise_weights) > 0:
-            noise_weights = np.array(noise_weights)
-            mean_noise = np.mean(noise_weights, axis=0)
-            std_noise = np.std(noise_weights, axis=0)
+        # ~is_pattern_synapse invierte la máscara (lo que no es patrón, es ruido)
+        if np.any(~is_pattern_synapse):
+            mean_noise = np.mean(all_weights_matrix[~is_pattern_synapse], axis=0)
+            std_noise = np.std(all_weights_matrix[~is_pattern_synapse], axis=0)
             
-            plt.plot(mon_w.t/b2.ms, mean_noise/b2.mV, 
-                     'k-', linewidth=2, label=f'Ruido (μ de {len(noise_weights)})')
-            plt.fill_between(mon_w.t/b2.ms, 
-                             (mean_noise - std_noise)/b2.mV,
-                             (mean_noise + std_noise)/b2.mV,
-                             color='gray', alpha=0.2)
-        
-        plt.title('Evolución de Pesos (promedios ± σ)', fontsize=12, fontweight='bold')
-    
+            ax4.plot(mon_w.t/b2.ms, mean_noise, 'k-', linewidth=2, label='Ruido (μ)')
+            ax4.fill_between(mon_w.t/b2.ms, 
+                             mean_noise - std_noise,
+                             mean_noise + std_noise, color='gray', alpha=0.2)
+            
+        ax4.set_title('Evolución Promedio', fontsize=10, fontweight='bold')
+
     elif weight_plot_mode == 'heatmap':
-        # OPCIÓN C: Heatmap
-        n_timepoints = len(mon_w.t)
-        weight_matrix = np.zeros((n_synapses, n_timepoints))
+        # --- MODO HEATMAP VECTORIZADO (SUPER RÁPIDO) ---
         
-        for syn_idx in range(n_synapses):
-            weight_matrix[syn_idx, :] = mon_w.w[syn_idx] / b2.mV
+        # 1. Obtenemos los índices ordenados: primero los que son True (patrón), luego False?
+        # argsort ordena de menor a mayor. False(0) < True(1). 
+        # Queremos Patrón arriba. Si patrón es índice bajo, usamos np.argsort directo sobre pre_indices.
+        # Una forma robusta: Concatenar los índices explícitamente.
         
-        pattern_indices = [i for i in range(n_synapses) if pre_indices[i] < pattern_size]
-        noise_indices = [i for i in range(n_synapses) if pre_indices[i] >= pattern_size]
-        sorted_indices = pattern_indices + noise_indices
-        weight_matrix_sorted = weight_matrix[sorted_indices, :]
+        idx_pattern = np.where(is_pattern_synapse)[0]
+        idx_noise = np.where(~is_pattern_synapse)[0]
+        sorted_indices = np.concatenate([idx_pattern, idx_noise])
         
-        im = plt.imshow(weight_matrix_sorted, aspect='auto', 
-                        cmap='viridis', interpolation='nearest',
-                        extent=[0, mon_w.t[-1]/b2.ms, n_synapses, 0])
+        # 2. Reordenamos la matriz entera usando esos índices (Fancy Indexing)
+        weights_sorted = all_weights_matrix[sorted_indices]
         
-        plt.axhline(len(pattern_indices), color='red', 
-                    linestyle='--', linewidth=2, label='División')
+        im = ax4.imshow(weights_sorted, aspect='auto', cmap='viridis', interpolation='nearest',
+                        extent=[0, duration_ms, n_synapses, 0])
         
-        plt.colorbar(im, label='Peso (mV)')
-        plt.title(f'Heatmap de Pesos ({len(pattern_indices)} patrón, {len(noise_indices)} ruido)', 
-                  fontsize=12, fontweight='bold')
-        plt.ylabel('Sinapsis (ordenadas)')
-    
-    plt.legend(loc="upper left")
-    plt.xlabel('Tiempo (ms)')
-    plt.ylabel('Peso (mV)' if weight_plot_mode != 'heatmap' else 'Sinapsis')
-    plt.grid(True, alpha=0.3)
+        ax4.axhline(len(idx_pattern), color='red', linestyle='--', label='División')
+        plt.colorbar(im, ax=ax4, label='Peso (mV)')
+        ax4.set_title('Heatmap de Pesos', fontsize=10, fontweight='bold')
+        ax4.set_ylabel('Sinapsis (Agrupadas)')
+
+    ax4.set_xlabel('Tiempo (ms)')
+    if weight_plot_mode != 'heatmap':
+        ax4.set_ylabel('Peso (mV)')
+        ax4.legend(loc='upper left')
     
     plt.tight_layout()
     plt.show()
     
-    
-    
-    
     # Estadísticas
     print("\n=== DIAGNÓSTICO ===")
     print(f"Spikes de salida: {n_spikes}")
-    print(f"Voltaje rango: {v_min:.2f} a {v_max:.2f} mV")
-    if v_max >= -54:
-        print("✅ Las neuronas SÍ alcanzan el umbral")
-    else:
-        print("⚠️ Las neuronas NO alcanzan el umbral")

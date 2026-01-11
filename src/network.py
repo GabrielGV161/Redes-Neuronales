@@ -80,7 +80,8 @@ def build_network(n_input=20, n_output=20, spike_indices=None, spike_times=None,
     spikemon_in = b2.SpikeMonitor(input_group)
     spikemon_out = b2.SpikeMonitor(output_group)
     statemon_v = b2.StateMonitor(output_group, 'v', record=True)
-    statemon_w = b2.StateMonitor(synapses, 'w', record=True, dt=1*b2.ms)
+    statemon_w = b2.StateMonitor(synapses, 'w', record=True, dt=50*b2.ms)
+#Graba cada 50 ms en dt para no saturar la RAM
 
     net = b2.Network(b2.collect())
     return {

@@ -12,9 +12,9 @@ def generate_pattern_data(n_input, duration_ms, pattern_size=3,
     """
     Genera datos adaptables a cualquier número de neuronas.
     """
-    duration_val = duration_ms
-    pattern_interval = 50  # Cada 50ms se repite el patrón
-    dt_pattern = 5         # Separación entre neuronas del patrón
+    duration_val = duration_ms  # Duración de un patrón
+    pattern_interval = 50       # Cada 50ms se repite el patrón
+    dt_pattern = 5              # Separación entre neuronas del patrón
     
     if pattern_size > n_input:
         pattern_size = n_input

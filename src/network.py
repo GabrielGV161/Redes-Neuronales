@@ -7,7 +7,7 @@ Created on Fri Jan  2 20:12:23 2026
 import brian2 as b2
 
 def build_network(n_input=20, n_output=20, spike_indices=None, spike_times=None, 
-                  connectivity_prob=0.8):  # ⭐ Nuevo parámetro
+                  connectivity_prob=0.8, learning_enabled=True):  # ⭐ Nuevo parámetro
     b2.start_scope()
     b2.defaultclock.dt = 0.1 * b2.ms 
     

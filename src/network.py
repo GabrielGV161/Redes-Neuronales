@@ -24,8 +24,8 @@ def build_network(n_input=20, n_output=20, spike_indices=None, spike_times=None,
         'tau_pre': 20 * b2.ms,      # Constante de tiempo pre-sinaptica (STDP)
         'tau_post': 20 * b2.ms,     # Constante de tiempo post-sinaptica (STDP)
         'w_max': 8.0 * b2.mV,       # Peso sináptico máximo
-        'dA_plus': 0.5 * b2.mV,    # Incremento en LTP (potenciación)
-        'dA_minus': 0.6 * b2.mV     # Incremento en LTD (depresión)
+        'dA_plus': 1.0 * b2.mV,    # Incremento en LTP (potenciación)
+        'dA_minus': 1.5 * b2.mV     # Incremento en LTD (depresión)
     }
     # CAMBIO: Crear con los datos reales desde el inicio
     # Si no hay datos de spikes, usar dummy para evitar errores
@@ -136,7 +136,7 @@ def build_network(n_input=20, n_output=20, spike_indices=None, spike_times=None,
             print(f"Conectividad total: {len(synapses)} sinapsis")
 
     # Inicializar pesos (importante hacerlo antes de cargar los entrenados)
-    synapses.w = 3.0 * b2.mV
+    synapses.w = 1.5 * b2.mV
     
     # MONITORES (para grabar datos durante la simulación)
     spikemon_in = b2.SpikeMonitor(input_group)      # Graba spikes de entrada

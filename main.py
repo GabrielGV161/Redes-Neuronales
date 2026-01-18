@@ -5,6 +5,7 @@ Created on Fri Jan  2 20:08:42 2026
 @author: ggv16
 """
 import brian2 as b2
+import numpy as np
 from src.data_gen import generate_pattern_data
 from src.network import build_network
 from src.simulation import run_simulation
@@ -18,8 +19,8 @@ if __name__ == '__main__':
     TAMANO_PATRON = 20
     TOTAL_NEURONAS_OUTPUT=20
     DURACION = 5000*b2.ms
-    DURACION_TRAIN = 5000*b2.ms
-    DURACION_TEST = 2000*b2.ms
+    DURACION_TRAIN = 10000*b2.ms
+    DURACION_TEST = 10000*b2.ms
     DT = 0.1
     CONECTIVIDAD = 0.8  #  50% de probabilidad
     
@@ -90,6 +91,24 @@ if __name__ == '__main__':
     )
     # Desplazamiento espacial para que sea "nuevo"
     indices_B = (indices_B + TAMANO_PATRON) % TOTAL_NEURONAS_INPUT
+    
+    # En main.py, FASE 2, después de generar indices_B y desplazarlos:
+
+    print("\n--- VERIFICACIÓN DE PATRONES ---")
+# Filtramos solo los indices que forman parte del patrón (los primeros pattern_size)
+# Nota: asumiendo que generate_pattern pone el patrón primero en el bucle
+# Aunque se ordenen temporalmente, podemos ver los únicos.
+
+    neuronas_activas_A = np.unique(indices_A)
+    neuronas_activas_B = np.unique(indices_B)
+    
+    print(f"Neuronas que usa A: {neuronas_activas_A[:10]} ...") 
+    print(f"Neuronas que usa B: {neuronas_activas_B[:10]} ...")
+
+# Comprobar intersección
+    comunes = np.intersect1d(neuronas_activas_A, neuronas_activas_B)
+    print(f"Neuronas compartidas: {len(comunes)} (Debería ser bajo, solo coincidencias de ruido)")
+    print("--------------------------------\n")
 
     # 3. Construir red UNA SOLA VEZ con la topología cargada
     print(" Construyendo red de test...")

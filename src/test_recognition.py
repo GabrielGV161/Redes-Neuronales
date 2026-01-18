@@ -40,7 +40,7 @@ def test_pattern_recognition(network_dict, test_data, duration, pattern_size):
     output_spikes = network_dict['mon_out']
     
     if len(output_spikes.t) == 0:
-        print("⚠️  No hubo respuesta de la red")
+        print("  No hubo respuesta de la red")
         return {
             'total_spikes': 0,
             'active_neurons': 0,
@@ -66,7 +66,7 @@ def test_pattern_recognition(network_dict, test_data, duration, pattern_size):
         'spikes_per_neuron': spikes_per_neuron
     }
     
-    print(f"\n🔍 Resultados del reconocimiento:")
+    print(f"\n Resultados del reconocimiento:")
     print(f"   Spikes totales: {total_spikes}")
     print(f"   Neuronas activas: {active_neurons}/{network_dict['n_output']}")
     print(f"   Tasa promedio: {spike_rate:.1f} Hz")
@@ -90,19 +90,25 @@ def compare_recognition(network_dict, pattern_trained, pattern_novel,
     Returns:
         dict: Comparación de métricas
     """
+    #  PASO 1: GUARDAR EL ESTADO INICIAL (CRÍTICO)
+    # Guardamos el estado 'default' justo antes de empezar los tests
+    print(" Guardando estado inicial de la red...")
+    network_dict['net'].store()
+    
     print("\n" + "="*60)
-    print("🧪 TEST 1: Patrón entrenado")
+    print(" TEST 1: Patrón entrenado")
     print("="*60)
     results_trained = test_pattern_recognition(
         network_dict, pattern_trained, duration, pattern_size
     )
-    
-    # Reiniciar la red para el segundo test
-    network_dict['net'].restore()  # Vuelve al estado inicial
+    #  PASO 2: RESTAURAR (Esto ahora funcionará porque ya existe el store)
+    print(" Restaurando estado inicial...")
+    network_dict['net'].restore()  # Vuelve al estado guardado arriba
     
     print("\n" + "="*60)
-    print("🧪 TEST 2: Patrón novel (no visto)")
+    print(" TEST 2: Patrón novel (no visto)")
     print("="*60)
+    
     results_novel = test_pattern_recognition(
         network_dict, pattern_novel, duration, pattern_size
     )
@@ -115,18 +121,18 @@ def compare_recognition(network_dict, pattern_trained, pattern_novel,
     }
     
     print("\n" + "="*60)
-    print("📊 DISCRIMINACIÓN")
+    print(" DISCRIMINACIÓN")
     print("="*60)
     print(f"   Ratio de spikes (entrenado/novel): {discrimination['spike_ratio']:.2f}x")
     print(f"   Ratio de fuerza: {discrimination['strength_ratio']:.2f}x")
     print(f"   Diferencia de tasa: {discrimination['rate_difference']:+.1f} Hz")
     
     if discrimination['spike_ratio'] > 1.5:
-        print("   ✅ La red DISCRIMINA bien (responde más al patrón entrenado)")
+        print("    La red DISCRIMINA bien (responde más al patrón entrenado)")
     elif discrimination['spike_ratio'] > 1.1:
-        print("   ⚠️  Discriminación débil")
+        print("    Discriminación débil")
     else:
-        print("   ❌ No discrimina (responde igual a ambos)")
+        print("    No discrimina (responde igual a ambos)")
     
     return {
         'trained': results_trained,

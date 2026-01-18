@@ -30,7 +30,7 @@ def generate_pattern_data(n_input, duration_ms, pattern_size=3,
         base_time = i * pattern_interval
         for p_idx in range(pattern_size):
             indices.append(p_idx)
-            t = base_time + p_idx * dt_pattern  # ⭐ Simplificado
+            t = base_time + p_idx * dt_pattern  #  Simplificado
             t_rounded = np.round(t / dt) * dt
             times.append(t_rounded)
     
@@ -65,8 +65,8 @@ def generate_pattern_data(n_input, duration_ms, pattern_size=3,
     # --- 5. UNIDADES ---
     final_times = final_times_vals * b2.ms
     
-    print(f"generate_pattern_data generó:")
-    print(f"  - {len(final_indices)} spikes únicos")
+    print(f"generate_pattern_data genero:")
+    print(f"  - {len(final_indices)} spikes unicos")
     print(f"  - Indices min/max: {final_indices.min()}/{final_indices.max()}")
     print(f"  - Times min/max: {final_times.min()}/{final_times.max()}")
     

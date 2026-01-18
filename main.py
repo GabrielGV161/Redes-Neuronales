@@ -9,8 +9,9 @@ from src.data_gen import generate_pattern_data
 from src.network import build_network
 from src.simulation import run_simulation
 from src.visualization import plot_results
-from src.weight_manager import save_weights, load_weights  # ⭐ NUEVO
-from src.test_recognition import compare_recognition  # ⭐ NUEVO
+from src.weight_manager import save_weights, load_weights, list_saved_weights  #  Añadir list_saved_weights
+from src.test_recognition import compare_recognition  #  NUEVO
+from src.weight_manager import save_weights, load_weights, load_topology # Importamos la nueva
 
 if __name__ == '__main__':
     TOTAL_NEURONAS_INPUT = 60
@@ -20,7 +21,7 @@ if __name__ == '__main__':
     DURACION_TRAIN = 5000*b2.ms
     DURACION_TEST = 2000*b2.ms
     DT = 0.1
-    CONECTIVIDAD = 0.8  # ⭐ 50% de probabilidad
+    CONECTIVIDAD = 0.8  #  50% de probabilidad
     
     #FASE 1: ENTRENAMIENTO
     
@@ -44,14 +45,16 @@ if __name__ == '__main__':
         spike_indices=indices_A, 
         spike_times=times_A,
         connectivity_prob=CONECTIVIDAD,
-        learning_enabled=True  # ⭐ STDP activo
+        learning_enabled=True  #  STDP activo
     )
     
     # Guardar pesos iniciales
-    weights_before = objs_train['synapses'].w[:].copy()
-    
+    #  GUARDAR (ahora más simple)
+    save_weights(objs_train, "pattern_A_trained.pkl", 
+            metadata={'pattern': 'A', 'duration_ms': DURACION_TRAIN/b2.ms})
+
     # Entrenar
-    print("\n🏋️ Entrenando...")
+    print("\n Entrenando...")
     run_simulation(objs_train, duration=DURACION_TRAIN, pattern_size=TAMANO_PATRON)
     
     # Visualizar
@@ -61,18 +64,23 @@ if __name__ == '__main__':
                 max_neurons_voltage=5,
                 weight_plot_mode="average",
                 duration_ms=DURACION_TRAIN/b2.ms)
-    
-    # ⭐ VERIFICACIÓN DE DEBUG
+
+    #  VERIFICACIÓN DE DEBUG
     print(f"Spikes generados: {len(indices_A)}")
     print(f"Tiempo máximo de spikes: {times_A[-1]/b2.ms:.1f} ms")
     print(f"Duración de simulación: {DURACION/b2.ms} ms")
     
+
     #FASE 2: TEST DE RECONOCIMIENTO
     print("\n" + "="*70)
     print("FASE 2: TEST DE RECONOCIMIENTO")
     print("="*70)
     
-    # Generar patrón B (diferente, para comparar)
+    # 1. Recuperar topología
+    print(" Leyendo estructura de la red entrenada...")
+    indices_i, indices_j = load_topology("pattern_A_trained.pkl")
+
+    # 2. Generar Patrón B (Desplazado)
     indices_B, times_B = generate_pattern_data(
         n_input=TOTAL_NEURONAS_INPUT,
         duration_ms=DURACION_TEST/b2.ms,
@@ -80,27 +88,31 @@ if __name__ == '__main__':
         noise_rate=20*b2.Hz,
         dt=DT
     )
-    
-    # Construir red EN MODO RECONOCIMIENTO (sin aprendizaje)
+    # Desplazamiento espacial para que sea "nuevo"
+    indices_B = (indices_B + TAMANO_PATRON) % TOTAL_NEURONAS_INPUT
+
+    # 3. Construir red UNA SOLA VEZ con la topología cargada
+    print(" Construyendo red de test...")
     objs_test = build_network(
         n_input=TOTAL_NEURONAS_INPUT, 
         n_output=TOTAL_NEURONAS_OUTPUT,
-        spike_indices=indices_A,  # Dummy, lo cambiaremos
-        spike_times=times_A,
-        connectivity_prob=CONECTIVIDAD,
-        learning_enabled=False  # ⭐ Pesos congelados
+        spike_indices=[0],    # Dummy, se actualiza en el test
+        spike_times=[0]*b2.ms,
+        connectivity_prob=CONECTIVIDAD, 
+        learning_enabled=False,         #  Test sin aprendizaje
+        topology_data=(indices_i, indices_j) #  Topología fija
     )
     
-    # Cargar pesos entrenados
-    load_weights(objs_test, "saved_weights/pattern_A_trained.pkl")
+    # 4. Cargar pesos
+    load_weights(objs_test, "pattern_A_trained.pkl")
     
-    # Comparar respuesta a patrón A vs B
+    # 5. Comparar
     comparison = compare_recognition(
         objs_test,
-        pattern_trained=(indices_A[:len(indices_A)//2], times_A[:len(times_A)//2]),  # Mitad del patrón A
-        pattern_novel=(indices_B[:len(indices_B)//2], times_B[:len(times_B)//2]),    # Mitad del patrón B
+        pattern_trained=(indices_A, times_A),
+        pattern_novel=(indices_B, times_B),
         duration=DURACION_TEST,
         pattern_size=TAMANO_PATRON
     )
     
-    print("\n✅ Experimento completado")
+    print("\n Experimento completado")

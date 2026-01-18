@@ -7,7 +7,8 @@ Created on Fri Jan  2 20:12:23 2026
 import brian2 as b2
 
 def build_network(n_input=20, n_output=20, spike_indices=None, spike_times=None, 
-                  connectivity_prob=0.8, learning_enabled=True):  # ⭐ Nuevo parámetro
+                  connectivity_prob=0.8, learning_enabled=True,
+                  topology_data=None):  #  Nuevo parámetro
     b2.start_scope()
     b2.defaultclock.dt = 0.1 * b2.ms 
     
@@ -20,11 +21,11 @@ def build_network(n_input=20, n_output=20, spike_indices=None, spike_times=None,
         'v_threshold': -54 * b2.mV, # Umbral de disparo
         'v_reset': -80 * b2.mV,     # Potencial después de disparar
         'tau_refrac': 2 * b2.ms,    # Período refractario
-        'tau_pre': 20 * b2.ms,      # Constante de tiempo pre-sináptica (STDP)
-        'tau_post': 20 * b2.ms,     # Constante de tiempo post-sináptica (STDP)
-        'w_max': 6.0 * b2.mV,       # Peso sináptico máximo
-        'dA_plus': 0.18 * b2.mV,    # Incremento en LTP (potenciación)
-        'dA_minus': 0.2 * b2.mV     # Incremento en LTD (depresión)
+        'tau_pre': 20 * b2.ms,      # Constante de tiempo pre-sinaptica (STDP)
+        'tau_post': 20 * b2.ms,     # Constante de tiempo post-sinaptica (STDP)
+        'w_max': 8.0 * b2.mV,       # Peso sináptico máximo
+        'dA_plus': 0.5 * b2.mV,    # Incremento en LTP (potenciación)
+        'dA_minus': 0.6 * b2.mV     # Incremento en LTD (depresión)
     }
     # CAMBIO: Crear con los datos reales desde el inicio
     # Si no hay datos de spikes, usar dummy para evitar errores
@@ -61,10 +62,10 @@ def build_network(n_input=20, n_output=20, spike_indices=None, spike_times=None,
     # SINAPSIS CON STDP
     eqs_stdp = '''
     w : volt                           # Peso sináptico
-    dapre/dt = -apre/tau_pre : 1       # Traza pre-sináptica (decae exponencialmente)
-    dapost/dt = -apost/tau_post : 1    # Traza post-sináptica (decae exponencialmente)
+    dapre/dt = -apre/tau_pre : 1       # Traza pre-sinaptica (decae exponencialmente)
+    dapost/dt = -apost/tau_post : 1    # Traza post-sinaptica (decae exponencialmente)
     '''
-    # ⭐⭐⭐ PARTE CRÍTICA: CONDICIONAL PARA STDP ⭐⭐⭐
+    # PARTE CRÍTICA: CONDICIONAL PARA STDP
     if learning_enabled:
      # ═══════════════════════════════════════════════
      # MODO APRENDIZAJE: STDP ACTIVO
@@ -73,8 +74,8 @@ def build_network(n_input=20, n_output=20, spike_indices=None, spike_times=None,
      # Qué hacer cuando llega un spike PRE-sináptico (de input):
          on_pre_eq = '''
          v_post += w                                    # 1. Aumentar voltaje de la neurona post
-         apre += 1                                      # 2. Incrementar traza pre-sináptica
-         w = clip(w - dA_minus * apost, 0*mV, w_max)    # 3. LTD: si había traza post, debilitar peso
+         apre += 1                                      # 2. Incrementar traza pre-sinaptica
+         w = clip(w - dA_minus * apost, 0*mV, w_max)    # 3. LTD: si habia traza post, debilitar peso
          '''
          # Explicación línea 3:
              # - Si la neurona POST disparó recientemente (apost > 0)
@@ -84,15 +85,15 @@ def build_network(n_input=20, n_output=20, spike_indices=None, spike_times=None,
      
      # Qué hacer cuando hay un spike POST-sináptico (de output):
          on_post_eq = '''
-         apost += 1                                     # 1. Incrementar traza post-sináptica
-         w = clip(w + dA_plus * apre, 0*mV, w_max)      # 2. LTP: si había traza pre, fortalecer peso
+         apost += 1                                     # 1. Incrementar traza post-sinaptica
+         w = clip(w + dA_plus * apre, 0*mV, w_max)      # 2. LTP: si habia traza pre, fortalecer peso
          '''
      # Explicación línea 2:
      # - Si hubo spikes PRE recientemente (apre > 0)
      # - Entonces este spike POST vino DESPUÉS de spikes PRE
      # - Esto es "buen timing" → fortalecemos la sinapsis (LTP)
      
-         print("🧠 Modo: APRENDIZAJE ACTIVO (STDP habilitado)")
+         print(" Modo: APRENDIZAJE ACTIVO (STDP habilitado)")
      
     else:
      # ═══════════════════════════════════════════════
@@ -103,32 +104,39 @@ def build_network(n_input=20, n_output=20, spike_indices=None, spike_times=None,
          on_pre_eq = 'v_post += w'  # Solo aumentar voltaje, nada más
          on_post_eq = ''            # No hacer nada cuando output dispara
      
-         print("🔒 Modo: RECONOCIMIENTO (Pesos congelados)")
+         print(" Modo: RECONOCIMIENTO (Pesos congelados)")
  
  # Crear objeto Synapses con las ecuaciones correspondientes
     # Crear objeto Synapses con las ecuaciones correspondientes
     synapses = b2.Synapses(
-       input_group,         # Neuronas pre-sinápticas (fuente)
-       output_group,        # Neuronas post-sinápticas (destino)
+       input_group,         # Neuronas pre-sinapticas (fuente)
+       output_group,        # Neuronas post-sinapticas (destino)
        model=eqs_stdp,      # Ecuaciones del modelo
-       on_pre=on_pre_eq,    # ⭐ Ecuación que depende del modo
-       on_post=on_post_eq,  # ⭐ Ecuación que depende del modo
+       on_pre=on_pre_eq,    #  Ecuación que depende del modo
+       on_post=on_post_eq,  #  Ecuación que depende del modo
        method='exact',
        namespace=params,
        name='Synapses'
    )
-   # ⭐ CONECTAR CON PROBABILIDAD
-   
-    if connectivity_prob < 1.0:
-        synapses.connect(p=connectivity_prob)
-        print(f"Conectividad sparse: {len(synapses)} de {n_input * n_output} posibles sinapsis")
+   #  CONECTAR CON PROBABILIDAD
+    if topology_data is not None:
+        # CASO A: RECONSTRUCCIÓN EXACTA (Test)
+        # Recibimos índices exactos (i, j) y conectamos solo esos.
+        inds_i, inds_j = topology_data
+        synapses.connect(i=inds_i, j=inds_j)
+        print(f" Conectividad reconstruida: {len(synapses)} sinapsis (fija)")
+        
     else:
-        synapses.connect()  # Conexión total
-        print(f"Conectividad total: {len(synapses)} sinapsis")
-    
-    # Inicializar todos los pesos al mismo valor
-    synapses.w = 3 * b2.mV 
+        # CASO B: GENERACIÓN ALEATORIA (Entrenamiento)
+        if connectivity_prob < 1.0:
+            synapses.connect(p=connectivity_prob)
+            print(f" Conectividad aleatoria (p={connectivity_prob}): {len(synapses)} sinapsis")
+        else:
+            synapses.connect()
+            print(f"Conectividad total: {len(synapses)} sinapsis")
 
+    # Inicializar pesos (importante hacerlo antes de cargar los entrenados)
+    synapses.w = 3.0 * b2.mV
     
     # MONITORES (para grabar datos durante la simulación)
     spikemon_in = b2.SpikeMonitor(input_group)      # Graba spikes de entrada
@@ -140,17 +148,26 @@ def build_network(n_input=20, n_output=20, spike_indices=None, spike_times=None,
     
     # CREAR RED Y RETORNAR
     
-    # Network() agrupa todos los objetos
-    net = b2.Network(b2.collect())
+    # Network() agrupa todos los objetos 
+    # DEFINICIÓN EXPLÍCITA (Sin b2.collect)
+    net = b2.Network(
+        input_group, 
+        output_group, 
+        synapses, 
+        spikemon_in, 
+        spikemon_out, 
+        statemon_v, 
+        statemon_w
+    )
     
-    # Retornar diccionario con todo
     return {
-        'net': net,                # Red completa
-        'input': input_group,      # Grupo de entrada
-        'synapses': synapses,      # Sinapsis
-        'mon_in': spikemon_in,     # Monitor de entrada
-        'mon_out': spikemon_out,   # Monitor de salida
-        'mon_v': statemon_v,       # Monitor de voltaje
-        'mon_w': statemon_w,       # Monitor de pesos
-        'n_output': n_output       # Info útil
+        'net': net,
+        'input': input_group,
+        'output': output_group,
+        'synapses': synapses,
+        'mon_in': spikemon_in,
+        'mon_out': spikemon_out,
+        'mon_v': statemon_v,
+        'mon_w': statemon_w,
+        'n_output': n_output
     }

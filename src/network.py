@@ -20,10 +20,10 @@ def build_network(n_input=20, n_output=20, spike_indices=None, spike_times=None,
         'v_rest': -70 * b2.mV,      # Potencial de reposo
         'v_threshold': -45 * b2.mV, # Umbral de disparo
         'v_reset': -80 * b2.mV,     # Potencial después de disparar
-        'tau_refrac': 12 * b2.ms,    # Período refractario
+        'tau_refrac': 5 * b2.ms,    # Período refractario
         'tau_pre': 20 * b2.ms,      # Constante de tiempo pre-sinaptica (STDP)
         'tau_post': 20 * b2.ms,     # Constante de tiempo post-sinaptica (STDP)
-        'w_max': 6.0 * b2.mV,       # Peso sináptico máximo
+        'w_max': 5.0 * b2.mV,       # Peso sináptico máximo
         'dA_plus': 1.0 * b2.mV,    # Incremento en LTP (potenciación)
         'dA_minus': 1.5 * b2.mV     # Incremento en LTD (depresión)
     }

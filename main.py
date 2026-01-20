@@ -9,7 +9,7 @@ import numpy as np
 from src.data_gen import generate_pattern_data,generate_pattern_B_different
 from src.network import build_network
 from src.simulation import run_simulation
-from src.visualization import plot_results
+from src.visualization import plot_results, plot_recognition_comparison
 from src.weight_manager import save_weights, load_weights, list_saved_weights  #  Añadir list_saved_weights
 from src.test_recognition import compare_recognition  #  NUEVO
 from src.weight_manager import save_weights, load_weights, load_topology # Importamos la nueva
@@ -146,13 +146,21 @@ if __name__ == '__main__':
         print("   ❌ HAY SOLAPAMIENTO")
     else:
         print("   ✅ Patrones completamente separados")
+
     # 8. Ejecutar test comparativo
     print("\n🧪 Ejecutando comparación de reconocimiento...")
-    comparison = compare_recognition(
+    
+    # AHORA DESEMPAQUETAMOS 3 VALORES (Stats, Resultados A, Resultados B)
+    stats, res_A, res_B = compare_recognition(
         objs_test,
         pattern_trained=(indices_A_test, times_A_test),
         pattern_novel=(indices_B, times_B),
         duration=DURACION_TEST,
         pattern_size=TAMANO_PATRON
     )
+    
+    # 9. GRÁFICA FINAL (Nuevo paso)
+    print("\n📈 Generando gráfica comparativa de Voltaje...")
+    plot_recognition_comparison(res_A, res_B)
+    
     print("\n✅ Experimento completado")

@@ -83,7 +83,7 @@ def generate_pattern_B_different(n_input, duration_ms, pattern_size, dt=0.1):
     """
     duration_val = duration_ms
     pattern_interval = 50  # ⭐ Diferente (A usa 50)
-    dt_pattern = 10        # ⭐ Diferente (A usa 5)
+    dt_pattern = 25        # ⭐ Diferente (A usa 5)
     pattern_start_neuron = 30  # ⭐ Empezar en neurona 30
     
     indices = []

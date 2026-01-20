@@ -12,7 +12,7 @@ Funciones para testear si la red reconoce patrones
 import brian2 as b2
 import numpy as np
 
-def test_pattern_recognition(network_dict, test_data, duration, pattern_size):
+def test_pattern_recognition(network_dict, spike_indices, spike_times, duration, pattern_size):
     """
     Presenta un patrón a la red (sin aprendizaje) y mide la respuesta.
     
@@ -25,117 +25,93 @@ def test_pattern_recognition(network_dict, test_data, duration, pattern_size):
     Returns:
         dict: Métricas de reconocimiento
     """
-    # Reiniciar monitores
-    network_dict['mon_in'].active = True
-    network_dict['mon_out'].active = True
+    # 1. Restaurar estado inicial (pesos y voltajes)
+    net = network_dict['net']
+    net.restore('initial_state')
     
-    # Inyectar nuevo patrón
-    indices, times = test_data
-    network_dict['input'].set_spikes(indices, times)
+    # 2. Configurar entrada
+    input_gen = network_dict['input']
+    input_gen.set_spikes(spike_indices, spike_times)
     
-    # Correr (sin modificar pesos porque learning_enabled=False)
-    network_dict['net'].run(duration)
+    # 3. Ejecutar simulación
+    net.run(duration)
     
-    # Analizar respuesta
-    output_spikes = network_dict['mon_out']
+   # 4. Recoger datos de monitores
+    mon_out = network_dict['mon_out']
+    mon_v = network_dict['mon_v']  # El StateMonitor del voltaje
     
-    if len(output_spikes.t) == 0:
-        print("  No hubo respuesta de la red")
-        return {
-            'total_spikes': 0,
-            'active_neurons': 0,
-            'spike_rate_hz': 0.0,
-            'response_strength': 0.0
-        }
-    
-    # Métricas básicas
-    total_spikes = len(output_spikes.t)
-    active_neurons = len(np.unique(output_spikes.i))
-    duration_sec = float(duration / b2.second)
-    spike_rate = total_spikes / duration_sec
-    
-    # "Fuerza" de respuesta = promedio de spikes por neurona activa
-    spikes_per_neuron = np.bincount(output_spikes.i, minlength=network_dict['n_output'])
-    response_strength = spikes_per_neuron.max()  # Neurona más activa
-    
-    results = {
-        'total_spikes': int(total_spikes),
-        'active_neurons': int(active_neurons),
-        'spike_rate_hz': float(spike_rate),
-        'response_strength': float(response_strength),
-        'spikes_per_neuron': spikes_per_neuron
-    }
-    
-    print(f"\n Resultados del reconocimiento:")
+# --- ESTADÍSTICAS BÁSICAS ---
+    count = mon_out.count
+    if len(count) > 0:
+        total_spikes = len(mon_out.t)
+        active_neurons = len(np.unique(mon_out.i))
+        max_response = np.max(count)
+        # Tasa promedio en Hz
+        mean_rate = total_spikes / network_dict['n_output'] / (duration/b2.second)
+    else:
+        total_spikes = 0
+        active_neurons = 0
+        max_response = 0
+        mean_rate = 0
+        
     print(f"   Spikes totales: {total_spikes}")
     print(f"   Neuronas activas: {active_neurons}/{network_dict['n_output']}")
-    print(f"   Tasa promedio: {spike_rate:.1f} Hz")
-    print(f"   Respuesta máxima: {response_strength:.0f} spikes")
+    print(f"   Tasa promedio: {mean_rate:.1f} Hz")
+    
+    # --- EXTRAER DATOS PARA GRÁFICA (Sin unidades para Matplotlib) ---
+    results = {
+        'total_spikes': total_spikes,
+        'mean_rate': mean_rate,
+        # Datos Input
+        'input_indices': np.array(spike_indices),
+        'input_times': np.array(spike_times / b2.ms),
+        # Datos Output (Voltaje) -> IMPORTANTE: Dividir por b2.mV
+        'time_trace': np.array(mon_v.t / b2.ms),
+        'voltage_trace': np.array(mon_v.v / b2.mV),
+        # Datos Output (Spikes - Raster)
+        'output_spikes_t': np.array(mon_out.t / b2.ms),
+        'output_spikes_i': np.array(mon_out.i)
+    }
     
     return results
 
-
-def compare_recognition(network_dict, pattern_trained, pattern_novel, 
-                       duration, pattern_size):
+def compare_recognition(network_dict, pattern_trained, pattern_novel, duration, pattern_size):
     """
-    Compara respuesta a patrón entrenado vs patrón nuevo.
-    
-    Args:
-        network_dict: Red entrenada
-        pattern_trained: Datos del patrón con el que se entrenó
-        pattern_novel: Datos de un patrón diferente
-        duration: Duración de cada test
-        pattern_size: Tamaño del patrón
-    
-    Returns:
-        dict: Comparación de métricas
+    Compara A vs B y devuelve los resultados crudos para plotear.
     """
-    #  PASO 1: GUARDAR EL ESTADO INICIAL (CRÍTICO)
-    # Guardamos el estado 'default' justo antes de empezar los tests
-    print(" Guardando estado inicial de la red...")
-    network_dict['net'].store()
+    # Guardar estado inicial antes de nada
+    network_dict['net'].store('initial_state')
     
     print("\n" + "="*60)
     print(" TEST 1: Patrón entrenado")
     print("="*60)
-    results_trained = test_pattern_recognition(
-        network_dict, pattern_trained, duration, pattern_size
-    )
-    #  PASO 2: RESTAURAR (Esto ahora funcionará porque ya existe el store)
-    print(" Restaurando estado inicial...")
-    network_dict['net'].restore()  # Vuelve al estado guardado arriba
+    indices_A, times_A = pattern_trained
+    res_A = test_pattern_recognition(network_dict, indices_A, times_A, duration, pattern_size)
     
     print("\n" + "="*60)
-    print(" TEST 2: Patrón novel (no visto)")
+    print(" TEST 2: Patrón novel")
     print("="*60)
+    indices_B, times_B = pattern_novel
+    res_B = test_pattern_recognition(network_dict, indices_B, times_B, duration, pattern_size)
     
-    results_novel = test_pattern_recognition(
-        network_dict, pattern_novel, duration, pattern_size
-    )
+    # Calcular ratios
+    rate_A = res_A['mean_rate']
+    rate_B = res_B['mean_rate']
     
-    # Calcular discriminación
-    discrimination = {
-        'spike_ratio': results_trained['total_spikes'] / max(results_novel['total_spikes'], 1),
-        'strength_ratio': results_trained['response_strength'] / max(results_novel['response_strength'], 1),
-        'rate_difference': results_trained['spike_rate_hz'] - results_novel['spike_rate_hz']
-    }
+    ratio = rate_A / rate_B if rate_B > 0 else rate_A # Evitar div por 0
+    diff = rate_A - rate_B
     
     print("\n" + "="*60)
     print(" DISCRIMINACIÓN")
     print("="*60)
-    print(f"   Ratio de spikes (entrenado/novel): {discrimination['spike_ratio']:.2f}x")
-    print(f"   Ratio de fuerza: {discrimination['strength_ratio']:.2f}x")
-    print(f"   Diferencia de tasa: {discrimination['rate_difference']:+.1f} Hz")
+    print(f"   Ratio (A/B): {ratio:.2f}x")
+    print(f"   Diferencia: {diff:+.1f} Hz")
     
-    if discrimination['spike_ratio'] > 1.5:
-        print("    La red DISCRIMINA bien (responde más al patrón entrenado)")
-    elif discrimination['spike_ratio'] > 1.1:
-        print("    Discriminación débil")
+    if ratio > 2.0:
+        print("   ✅ LA RED DISCRIMINA (Prefiere el patrón entrenado)")
     else:
-        print("    No discrimina (responde igual a ambos)")
-    
-    return {
-        'trained': results_trained,
-        'novel': results_novel,
-        'discrimination': discrimination
-    }
+        print("   ❌ NO DISCRIMINA CLARAMENTE")
+        
+    # Devolvemos TODO: estadísticas y los datos crudos de A y B
+    stats = {'ratio': ratio, 'diff': diff}
+    return stats, res_A, res_B

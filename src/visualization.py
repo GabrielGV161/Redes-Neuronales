@@ -163,3 +163,74 @@ def plot_results(d, pattern_size=3, max_neurons_voltage=5,
     # Estadísticas
     print("\n=== DIAGNÓSTICO ===")
     print(f"Spikes de salida: {n_spikes}")
+    
+def plot_recognition_comparison(res_A, res_B, title="Discriminación: Entrenado vs Novel"):
+    """
+    Crea una ventana con 4 subgráficas:
+    [ Raster Input A ] [ Raster Input B ]
+    [ Voltaje Out A  ] [ Voltaje Out B  ]
+    """
+    fig, axes = plt.subplots(2, 2, figsize=(14, 8))
+    fig.suptitle(title, fontsize=16, fontweight='bold')
+    
+    # ==========================================
+    # COLUMNA IZQUIERDA: PATRÓN ENTRENADO (A)
+    # ==========================================
+    
+    # 1. Raster Input
+    ax1 = axes[0, 0]
+    ax1.scatter(res_A['input_times'], res_A['input_indices'], s=1, c='green', alpha=0.5)
+    ax1.set_title("Estímulo Entrenado (Input)", color='green', fontweight='bold')
+    ax1.set_ylabel("ID Neurona Input")
+    ax1.set_ylim(-1, 90) # Ajusta esto a tu TOTAL_NEURONAS
+    ax1.grid(True, alpha=0.3)
+
+    # 2. Voltaje Output
+    ax2 = axes[1, 0]
+    times = res_A['time_trace']
+    voltages = res_A['voltage_trace']
+    
+    # Dibujar trazas de las primeras 10 neuronas para no saturar la gráfica
+    # Si quieres ver todas, quita el 'min(10, ...)' y pon solo voltages.shape[0]
+    for i in range(min(15, voltages.shape[0])):
+        ax2.plot(times, voltages[i], color='green', alpha=0.5, linewidth=1)
+        
+    # Línea de umbral
+    ax2.axhline(-45, color='red', linestyle='--', label='Umbral (-45mV)')
+    
+    ax2.set_title(f"Respuesta: {int(res_A['total_spikes'])} spikes")
+    ax2.set_xlabel("Tiempo (ms)")
+    ax2.set_ylabel("Voltaje (mV)")
+    # Ajustamos el eje Y para ver bien desde reposo (-70) hasta un poco por encima del umbral
+    ax2.set_ylim(-85, -20) 
+    ax2.legend(loc='upper right', fontsize='small')
+    ax2.grid(True, alpha=0.3)
+
+    # ==========================================
+    # COLUMNA DERECHA: PATRÓN NOVEL (B)
+    # ==========================================
+    
+    # 3. Raster Input
+    ax3 = axes[0, 1]
+    ax3.scatter(res_B['input_times'], res_B['input_indices'], s=1, c='gray', alpha=0.5)
+    ax3.set_title("Estímulo Novel (Input)", color='gray', fontweight='bold')
+    ax3.set_ylim(-1, 90)
+    ax3.grid(True, alpha=0.3)
+
+    # 4. Voltaje Output
+    ax4 = axes[1, 1]
+    times_B = res_B['time_trace']
+    voltages_B = res_B['voltage_trace']
+    
+    for i in range(min(15, voltages_B.shape[0])):
+        ax4.plot(times_B, voltages_B[i], color='black', alpha=0.3, linewidth=1)
+        
+    ax4.axhline(-45, color='red', linestyle='--')
+    
+    ax4.set_title(f"Respuesta: {int(res_B['total_spikes'])} spikes")
+    ax4.set_xlabel("Tiempo (ms)")
+    ax4.set_ylim(-85, -20) # Misma escala Y que el A para ser honestos
+    ax4.grid(True, alpha=0.3)
+
+    plt.tight_layout()
+    plt.show()

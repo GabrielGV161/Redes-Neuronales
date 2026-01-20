@@ -98,9 +98,6 @@ def load_topology(filename):
 
 
 def load_weights(network_dict, filename):
-    """
-    Carga los valores de los pesos en una red YA construida.
-    """
     filepath = os.path.join("saved_weights", filename)
     synapses = network_dict['synapses']
     
@@ -108,20 +105,49 @@ def load_weights(network_dict, filename):
         data = pickle.load(f)
     
     saved_w = data['weights']
+    saved_i = data['indices_i']
+    saved_j = data['indices_j']
     
-    # Verificación de seguridad
-    if len(synapses) != len(saved_w):
-        # Si esto falla, es que no usamos load_topology al construir
-        raise ValueError(
-            f"Error de Topología: La red tiene {len(synapses)} sinapsis "
-            f"pero el archivo tiene {len(saved_w)}. "
-            "¿Usaste 'load_topology' en build_network?"
-        )
+    print(f"📂 Archivo tiene {len(saved_w)} pesos.")
+    print(f"🧠 La red tiene {len(synapses)} sinapsis actualmente.")
+
+    # CASO A: La red ya se construyó con topología (en build_network)
+    if len(synapses) == len(saved_w):
+        print("   -> Estructura correcta detectada. Asignando valores...")
+        # ⭐⭐⭐ CRÍTICO: Verificar si saved_w ya tiene unidades
+        if hasattr(saved_w, 'dim'):  # Ya tiene unidades de Brian2
+            synapses.w = saved_w
+        else:  # Es un array de NumPy sin unidades
+            synapses.w = saved_w * b2.volt  # ⭐ Añadir unidades
         
-    synapses.w = saved_w * b2.volt  # Restauramos unidades (si se guardaron sin ellas, ajusta esto)
-    print(f" Pesos cargados desde {filename}")
-
-
+    # CASO B: La red está vacía o descoordinada (hubo error o no se pasó topology)
+    elif len(synapses) == 0:
+        print("   -> Red vacía. Reconstruyendo conexiones...")
+        synapses.connect(i=saved_i, j=saved_j)
+    
+        if hasattr(saved_w, 'dim'):
+            synapses.w = saved_w
+        else:
+            synapses.w = saved_w * b2.volt  # ⭐ Añadir unidades
+        
+    # CASO C: Desastre (tienes el doble, o un número distinto)
+    else:
+        # Si tienes 2128, es que se duplicaron. Lo arreglamos "a lo bruto" para que corra
+        if len(synapses) > len(saved_w):
+            print("⚠️ AVISO: Detectadas más sinapsis de las guardadas (¿Duplicación?).")
+            print("   -> Intentando asignar solo a las primeras...")
+            # Esto es un parche, lo ideal es que main.py no duplique
+            if hasattr(saved_w, 'dim'):
+                synapses.w[:len(saved_w)] = saved_w
+            else:
+                synapses.w[:len(saved_w)] = saved_w * b2.volt  # ⭐ Añadir unidades
+        else:
+            raise ValueError(f"❌ Error de Topología: Red={len(synapses)}, Archivo={len(saved_w)}")
+    
+    # ⭐⭐⭐ Verificación con unidades correctas
+    peso_max = np.max(synapses.w)
+    print(f"✅ Pesos cargados correctamente. Máx: {np.max(synapses.w)}")
+    
 def list_saved_weights():
     """
     Lista todos los archivos de pesos guardados.

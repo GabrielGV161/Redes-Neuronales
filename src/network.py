@@ -16,14 +16,14 @@ def build_network(n_input=20, n_output=20, spike_indices=None, spike_times=None,
     
     # Parámetros del modelo LIF y STDP
     params = {
-        'tau_m': 10 * b2.ms,        # Constante de tiempo de membrana
+        'tau_m': 25 * b2.ms,        # Constante de tiempo de membrana
         'v_rest': -70 * b2.mV,      # Potencial de reposo
-        'v_threshold': -54 * b2.mV, # Umbral de disparo
+        'v_threshold': -45 * b2.mV, # Umbral de disparo
         'v_reset': -80 * b2.mV,     # Potencial después de disparar
-        'tau_refrac': 2 * b2.ms,    # Período refractario
+        'tau_refrac': 12 * b2.ms,    # Período refractario
         'tau_pre': 20 * b2.ms,      # Constante de tiempo pre-sinaptica (STDP)
         'tau_post': 20 * b2.ms,     # Constante de tiempo post-sinaptica (STDP)
-        'w_max': 8.0 * b2.mV,       # Peso sináptico máximo
+        'w_max': 6.0 * b2.mV,       # Peso sináptico máximo
         'dA_plus': 1.0 * b2.mV,    # Incremento en LTP (potenciación)
         'dA_minus': 1.5 * b2.mV     # Incremento en LTD (depresión)
     }
@@ -73,7 +73,7 @@ def build_network(n_input=20, n_output=20, spike_indices=None, spike_times=None,
      
      # Qué hacer cuando llega un spike PRE-sináptico (de input):
          on_pre_eq = '''
-         v_post += w                                    # 1. Aumentar voltaje de la neurona post
+         v_post += w* int(not_refractory_post)          # 1. Aumentar voltaje de la neurona post
          apre += 1                                      # 2. Incrementar traza pre-sinaptica
          w = clip(w - dA_minus * apost, 0*mV, w_max)    # 3. LTD: si habia traza post, debilitar peso
          '''
@@ -101,7 +101,7 @@ def build_network(n_input=20, n_output=20, spike_indices=None, spike_times=None,
      # ═══════════════════════════════════════════════
      
      # Solo transmitir señal, sin modificar pesos
-         on_pre_eq = 'v_post += w'  # Solo aumentar voltaje, nada más
+         on_pre_eq = 'v_post += w* int(not_refractory_post)'  # Solo aumentar voltaje, nada más
          on_post_eq = ''            # No hacer nada cuando output dispara
      
          print(" Modo: RECONOCIMIENTO (Pesos congelados)")

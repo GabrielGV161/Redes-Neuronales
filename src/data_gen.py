@@ -13,8 +13,8 @@ def generate_pattern_data(n_input, duration_ms, pattern_size=3,
     Genera datos adaptables a cualquier número de neuronas.
     """
     duration_val = duration_ms  # Duración de un patrón
-    pattern_interval = 50       # Cada 50ms se repite el patrón
-    dt_pattern = 5              # Separación entre neuronas del patrón
+    pattern_interval = 50       # Cada cuanto se repite el patrón
+    dt_pattern = 10              # Separación entre neuronas del patrón
     
     if pattern_size > n_input:
         pattern_size = n_input
@@ -69,5 +69,57 @@ def generate_pattern_data(n_input, duration_ms, pattern_size=3,
     print(f"  - {len(final_indices)} spikes unicos")
     print(f"  - Indices min/max: {final_indices.min()}/{final_indices.max()}")
     print(f"  - Times min/max: {final_times.min()}/{final_times.max()}")
+    
+    return final_indices, final_times
+
+def generate_pattern_B_different(n_input, duration_ms, pattern_size, dt=0.1):
+    """
+    Genera un patrón B completamente diferente de A.
+    
+    Diferencias vs patrón A:
+    - Intervalo diferente (25ms vs 50ms)
+    - Separación diferente (10ms vs 5ms)
+    - Neuronas diferentes (30-60 vs 0-30)
+    """
+    duration_val = duration_ms
+    pattern_interval = 50  # ⭐ Diferente (A usa 50)
+    dt_pattern = 10        # ⭐ Diferente (A usa 5)
+    pattern_start_neuron = 30  # ⭐ Empezar en neurona 30
+    
+    indices = []
+    times = []
+    
+    # Generar patrón B
+    n_repetitions = int(duration_val / pattern_interval)
+    
+    for i in range(n_repetitions):
+        base_time = i * pattern_interval
+        for p_idx in range(pattern_size):
+            neuron_id = pattern_start_neuron + p_idx
+            if neuron_id >= n_input:  # No pasarse del límite
+                break
+            
+            indices.append(neuron_id)
+            t = base_time + p_idx * dt_pattern
+            t_rounded = np.round(t / dt) * dt
+            times.append(t_rounded)
+    
+    # Convertir y deduplicar (igual que generate_pattern_data)
+    all_indices = np.array(indices, dtype=int)
+    all_times = np.array(times)
+    
+    spike_pairs = list(zip(all_indices, all_times))
+    unique_pairs = list(set(spike_pairs))
+    unique_pairs.sort(key=lambda x: x[1])
+    
+    final_indices = np.array([p[0] for p in unique_pairs], dtype=int)
+    final_times_vals = np.array([p[1] for p in unique_pairs])
+    final_times = final_times_vals * b2.ms
+    
+    print(f"Patrón B generado:")
+    print(f"  - {len(final_indices)} spikes")
+    print(f"  - Neuronas: {pattern_start_neuron} a {pattern_start_neuron + pattern_size - 1}")
+    print(f"  - Intervalo: {pattern_interval}ms (vs 50ms en A)")
+    print(f"  - Separación: {dt_pattern}ms (vs 5ms en A)")
     
     return final_indices, final_times

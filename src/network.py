@@ -106,7 +106,6 @@ def build_network(n_input=20, n_output=20, spike_indices=None, spike_times=None,
      
          print(" Modo: RECONOCIMIENTO (Pesos congelados)")
  
- # Crear objeto Synapses con las ecuaciones correspondientes
     # Crear objeto Synapses con las ecuaciones correspondientes
     synapses = b2.Synapses(
        input_group,         # Neuronas pre-sinapticas (fuente)

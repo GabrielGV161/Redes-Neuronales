@@ -1,75 +1,76 @@
 import numpy as np
 import brian2 as b2
 
-def generate_ecg_data(n_input=90, duration_ms=10000, bpm=75, noise_level=0.1, mode='healthy'):
+def generate_ecg_data(n_input=90, duration_ms=200, bpm=75, mode='healthy', noise_level=0.05):
     """
-    Genera trenes de spikes simulando un ECG.
-    
-    Args:
-        n_input: Número de fibras de entrada (neuronas).
-        duration_ms: Duración de la simulación.
-        bpm: Pulsaciones por minuto (ritmo base).
-        noise_level: Probabilidad de ruido aleatorio (0.0 a 1.0).
-        mode: 'healthy' (rítmico) o 'arrhythmia' (caótico).
+    Genera spikes sintéticos y LIMPIA duplicados para evitar errores de Brian2.
     """
-    dt = 1.0 * b2.ms # Resolución temporal
-    duration_sec = duration_ms / 1000
-    total_steps = int(duration_ms)
+    # 1. Tiempos base
+    interval_sec = 60.0 / bpm
+    duration_sec = duration_ms / 1000.0
+    beat_times = np.arange(0.1, duration_sec, interval_sec)
     
     indices = []
     times = []
     
-    # 1. GENERAR LATIDOS (SEÑAL)
-    # Un corazón sano late cada X ms (aprox 800ms para 75 BPM)
-    beat_interval_ms = (60 / bpm) * 1000
+    # Rango de neuronas (Mismo cable para ambos modos para hacerlo difícil)
+    signal_neurons = np.arange(0, 40) 
+
+    # 2. Generación de Patrones
+    if mode == 'healthy':
+        sigma_jitter = 0.005 
+        for t_beat in beat_times:
+            for neuron_idx in signal_neurons:
+                spike_t = t_beat + np.random.normal(0, sigma_jitter)
+                indices.append(neuron_idx)
+                times.append(spike_t)
+
+    elif mode == 'arrhythmia':
+        sigma_jitter = 0.030 
+        for t_beat in beat_times:
+            if np.random.rand() > 0.2: # A veces bloquea
+                for neuron_idx in signal_neurons:
+                    spike_t = t_beat + np.random.normal(0, sigma_jitter)
+                    # Añadir desfase aleatorio
+                    spike_t += np.random.uniform(0, 0.050)
+                    indices.append(neuron_idx)
+                    times.append(spike_t)
+
+    # 3. Ruido
+    num_noise = int(n_input * duration_sec * noise_level * 100)
+    indices.extend(np.random.randint(0, n_input, num_noise))
+    times.extend(np.random.uniform(0, duration_sec, num_noise))
     
-    current_time = 0
-    while current_time < duration_ms:
-        # A) Determinar cuándo ocurre el siguiente latido
-        if mode == 'healthy':
-            # Ritmo regular con variabilidad natural mínima (Jitter biológico)
-            interval = np.random.normal(beat_interval_ms, 10) # +/- 10ms
-        else:
-            # Arritmia (Fibrilación): Intervalos muy caóticos
-            # A veces rápido (300ms), a veces lento (1200ms)
-            interval = np.random.uniform(300, 1200)
-            
-        current_time += interval
-        if current_time >= duration_ms: break
-        
-        # B) Generar el "Complejo QRS" (El latido en sí)
-        # Un latido es un disparo SINCRONIZADO de muchas neuronas
-        # Hacemos que disparen las neuronas 0 a 40 (el patrón a reconocer)
-        pattern_neurons = 40 
-        
-        for i in range(pattern_neurons):
-            # No todas disparan al instante exacto, hay una dispersión de ~5ms
-            spike_time = current_time + np.random.normal(0, 2)
-            indices.append(i)
-            times.append(spike_time)
-            
-    # 2. GENERAR RUIDO (ARTEFACTOS)
-    # El ruido afecta a TODAS las neuronas (0 a 89) de forma aleatoria
-    # Es ruido de fondo continuo (Poisson)
-    
-    noise_rate = noise_level * 50 # Hz de ruido base
-    n_noise_spikes = int(noise_rate * duration_sec * n_input)
-    
-    noise_indices = np.random.randint(0, n_input, n_noise_spikes)
-    noise_times = np.random.uniform(0, duration_ms, n_noise_spikes)
-    
-    indices.extend(noise_indices)
-    times.extend(noise_times)
-    
-    # 3. EMPAQUETAR Y ORDENAR
+    # =========================================================
+    # 🧹 LIMPIEZA CRÍTICA (Evita el ValueError de Brian2)
+    # =========================================================
     all_indices = np.array(indices, dtype=int)
-    all_times = np.array(times) * b2.ms
+    all_times = np.array(times)
     
-    # Ordenar cronológicamente (Brian2 lo exige)
+    # 1. Eliminar tiempos fuera de rango (negativos o > duracion)
+    mask_valid = (all_times >= 0) & (all_times < duration_sec)
+    all_indices = all_indices[mask_valid]
+    all_times = all_times[mask_valid]
+    
+    # 2. Ordenar cronológicamente (Brian2 lo exige)
     sort_idx = np.argsort(all_times)
+    all_indices = all_indices[sort_idx]
+    all_times = all_times[sort_idx]
     
-    print(f"🫀 ECG Generado ({mode}): {int(bpm)} BPM aprox")
-    print(f"   - Señal: Neuronas 0-40 (Sincronizadas)")
-    print(f"   - Ruido: Todo el canal (Nivel {noise_level})")
+    # 3. Eliminar duplicados exactos en el mismo dt
+    # Brian2 tiene dt=0.1ms. Si dos spikes caen en el mismo bin, crash.
+    # Truco: Convertimos a "pasos de tiempo" enteros y buscamos duplicados
+    dt = 0.0001 # 0.1 ms
+    time_steps = (all_times / dt).astype(int)
     
-    return all_indices[sort_idx], all_times[sort_idx]
+    # Creamos un identificador único: neuron_id * gran_numero + time_step
+    # Esto nos permite encontrar si (neurona 5, tiempo 100) está repe.
+    unique_id = all_indices * 1e9 + time_steps
+    
+    _, unique_idx = np.unique(unique_id, return_index=True)
+    
+    # Reordenamos porque np.unique devuelve ordenado por valor, no por índice original
+    final_indices = all_indices[np.sort(unique_idx)]
+    final_times = all_times[np.sort(unique_idx)] * b2.second
+    
+    return final_indices, final_times

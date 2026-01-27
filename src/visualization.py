@@ -164,73 +164,120 @@ def plot_results(d, pattern_size=3, max_neurons_voltage=5,
     print("\n=== DIAGNÓSTICO ===")
     print(f"Spikes de salida: {n_spikes}")
     
-def plot_recognition_comparison(res_A, res_B, title="Discriminación: Entrenado vs Novel"):
+def plot_recognition_comparison(data_trained, data_novel, v_threshold_mv=-50.0, title="Diagnóstico SNN"):
     """
-    Crea una ventana con 4 subgráficas:
-    [ Raster Input A ] [ Raster Input B ]
-    [ Voltaje Out A  ] [ Voltaje Out B  ]
+    Pinta las trazas de voltaje separando equipos por color.
+    
+    Args:
+        v_threshold_mv (float): Valor del umbral en mV (ej: -50). La línea roja se ajustará a esto.
     """
-    fig, axes = plt.subplots(2, 2, figsize=(14, 8))
+    
+    fig, axs = plt.subplots(1, 2, figsize=(14, 6), sharey=True)
     fig.suptitle(title, fontsize=16, fontweight='bold')
     
-    # ==========================================
-    # COLUMNA IZQUIERDA: PATRÓN ENTRENADO (A)
-    # ==========================================
+    # Definimos punto medio para separar equipos (asumiendo 10 neuronas)
+    n_neurons = data_trained['v'].shape[0] # Filas de la matriz de voltaje
+    mid_point = n_neurons // 2
     
-    # 1. Raster Input
-    ax1 = axes[0, 0]
-    ax1.scatter(res_A['input_times'], res_A['input_indices'], s=1, c='green', alpha=0.5)
-    ax1.set_title("Estímulo Entrenado (Input)", color='green', fontweight='bold')
-    ax1.set_ylabel("ID Neurona Input")
-    ax1.set_ylim(-1, 90) # Ajusta esto a tu TOTAL_NEURONAS
-    ax1.grid(True, alpha=0.3)
-
-    # 2. Voltaje Output
-    ax2 = axes[1, 0]
-    times = res_A['time_trace']
-    voltages = res_A['voltage_trace']
-    
-    # Dibujar trazas de las primeras 10 neuronas para no saturar la gráfica
-    # Si quieres ver todas, quita el 'min(10, ...)' y pon solo voltages.shape[0]
-    for i in range(min(15, voltages.shape[0])):
-        ax2.plot(times, voltages[i], color='green', alpha=0.5, linewidth=1)
+    # --- FUNCIÓN AUXILIAR DE PINTADO ---
+    def plot_voltage_lines(ax, data, subtitle):
+        time = data['t']
+        voltages = data['v']
         
-    # Línea de umbral
-    ax2.axhline(-45, color='red', linestyle='--', label='Umbral (-45mV)')
-    
-    ax2.set_title(f"Respuesta: {int(res_A['total_spikes'])} spikes")
-    ax2.set_xlabel("Tiempo (ms)")
-    ax2.set_ylabel("Voltaje (mV)")
-    # Ajustamos el eje Y para ver bien desde reposo (-70) hasta un poco por encima del umbral
-    ax2.set_ylim(-85, -20) 
-    ax2.legend(loc='upper right', fontsize='small')
-    ax2.grid(True, alpha=0.3)
+        # Iteramos por cada neurona para darle su color
+        for i in range(n_neurons):
+            if i < mid_point:
+                # EQUIPO SANO (A) -> VERDE
+                color = 'green'
+                label = 'Equipo Sano' if i == 0 else "" # Solo poner label una vez
+                zorder = 2 # Poner encima
+            else:
+                # EQUIPO ARRITMIA (B) -> ROJO
+                color = '#D62728' # Rojo bonito
+                label = 'Equipo Arritmia' if i == mid_point else ""
+                zorder = 1
+            
+            # Pintamos la línea
+            ax.plot(time, voltages[i, :], color=color, alpha=0.8, linewidth=1.2, label=label, zorder=zorder)
 
-    # ==========================================
-    # COLUMNA DERECHA: PATRÓN NOVEL (B)
-    # ==========================================
-    
-    # 3. Raster Input
-    ax3 = axes[0, 1]
-    ax3.scatter(res_B['input_times'], res_B['input_indices'], s=1, c='gray', alpha=0.5)
-    ax3.set_title("Estímulo Novel (Input)", color='gray', fontweight='bold')
-    ax3.set_ylim(-1, 90)
-    ax3.grid(True, alpha=0.3)
-
-    # 4. Voltaje Output
-    ax4 = axes[1, 1]
-    times_B = res_B['time_trace']
-    voltages_B = res_B['voltage_trace']
-    
-    for i in range(min(15, voltages_B.shape[0])):
-        ax4.plot(times_B, voltages_B[i], color='black', alpha=0.3, linewidth=1)
+        # Configuración del Eje
+        ax.set_title(subtitle, fontsize=12)
+        ax.set_xlabel("Tiempo (ms)")
+        ax.set_ylim(-85, v_threshold_mv + 10) # Ajuste automático del eje Y
+        ax.grid(True, alpha=0.3)
         
-    ax4.axhline(-45, color='red', linestyle='--')
-    
-    ax4.set_title(f"Respuesta: {int(res_B['total_spikes'])} spikes")
-    ax4.set_xlabel("Tiempo (ms)")
-    ax4.set_ylim(-85, -20) # Misma escala Y que el A para ser honestos
-    ax4.grid(True, alpha=0.3)
+        # LÍNEA DE UMBRAL DINÁMICA
+        ax.axhline(y=v_threshold_mv, color='red', linestyle='--', linewidth=2, label=f'Umbral ({v_threshold_mv} mV)')
+        
+        # Solo mostrar leyenda en el primer gráfico para no tapar
+        if subtitle == "Reacción ante Estímulo SANO":
+            ax.legend(loc='lower right', frameon=True, fontsize='small')
+
+    # --- PANEL IZQUIERDO: RESPUESTA A SANO ---
+    plot_voltage_lines(axs[0], data_trained, "Reacción ante Estímulo SANO")
+    axs[0].set_ylabel("Voltaje de Membrana (mV)")
+
+    # --- PANEL DERECHO: RESPUESTA A ARRITMIA ---
+    plot_voltage_lines(axs[1], data_novel, "Reacción ante Estímulo ARRITMIA")
 
     plt.tight_layout()
+    plt.savefig("diagnostico_voltaje_equipos.png")
     plt.show()
+
+def plot_ecg_validation(signal, fs, spike_times, title="Validación ECG Real"):
+    """
+    Pinta el ECG original y marca dónde la SNN 've' los latidos.
+    CORREGIDO: Gestiona unidades de Brian2 para evitar DimensionMismatchError.
+    """
+    import matplotlib.pyplot as plt
+    import brian2 as b2
+    import numpy as np
+    
+    # --- FIX CRÍTICO: Eliminar unidades de Brian2 ---
+    # Si spike_times tiene unidades (es un Quantity), lo pasamos a segundos puros (float)
+    try:
+        times_sec = spike_times / b2.second
+    except:
+        # Si ya era float (sin unidades), lo dejamos tal cual
+        times_sec = spike_times
+        
+    # Asegurarnos de que es un array de numpy plano
+    times_sec = np.array(times_sec)
+    # -----------------------------------------------
+    
+    # Crear eje de tiempos para la señal analógica
+    duration = len(signal) / fs
+    t_signal = np.linspace(0, duration, len(signal))
+    
+    plt.figure(figsize=(12, 4))
+    plt.plot(t_signal, signal, 'k-', alpha=0.6, label='ECG Real (MIT-BIH)')
+    
+    # Pintar marcas donde hemos generado spikes
+    # Filtramos para pintar solo una línea por latido (clustering visual)
+    clean_times = []
+    last_t = -1.0 # Float puro
+    
+    # Ordenamos los tiempos limpios
+    for t in np.sort(times_sec):
+        # Ahora t y last_t son floats puros, la resta funciona
+        if t - last_t > 0.1: # Si ha pasado más de 100ms, asumimos nuevo latido
+            clean_times.append(t)
+            last_t = t
+            
+    plt.vlines(clean_times, ymin=np.min(signal), ymax=np.max(signal), 
+               colors='r', linestyles='--', linewidth=1.5, label='Latido Detectado (SNN)')
+    
+    plt.title(title)
+    plt.xlabel("Tiempo (s)")
+    plt.ylabel("Amplitud")
+    plt.legend()
+    plt.grid(True, alpha=0.3)
+    plt.tight_layout()
+    
+    filename = f"validation_{title.replace(' ', '_')}.png"
+    plt.savefig(filename)
+    print(f"📈 Gráfica de validación guardada: {filename}")
+    try:
+        plt.show()
+    except:
+        pass

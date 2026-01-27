@@ -5,6 +5,12 @@ Created on Thu Jan 22 12:30:36 2026
 @author: ggv16
 """
 
+# -*- coding: utf-8 -*-
+"""
+Created on Thu Jan 22 12:30:36 2026
+
+@author: ggv16
+"""
 import wfdb
 import numpy as np
 import brian2 as b2
@@ -17,11 +23,11 @@ class RealECGLoader:
     def load_mit_bih_data(self, record_name='100', duration_sec=10):
         print(f"⬇️ Descargando/Cargando ECG Real: Record {record_name}...")
         try:
-            samp_end = int(duration_sec * 360)
-            # Cargar señal
-            record = wfdb.rdrecord(record_name, sampfrom=0, sampto=samp_end, pn_dir='mitdb')
-            signal = record.p_signal[:, 0] 
+            # Cargar señal completa (wfdb entrega fs en el objeto)
+            record = wfdb.rdrecord(record_name, sampfrom=0, pn_dir='mitdb')
             fs = record.fs
+            samp_end = int(duration_sec * fs)
+            signal = record.p_signal[:samp_end, 0] 
             
             # Cargar anotaciones (Solo para validación, no para generar spikes)
             try:
@@ -117,8 +123,6 @@ class RealECGLoader:
         neurons_pattern = 40 
         
         # Factor de conversión: Ancho real (s) -> Jitter (sigma)
-        # Un ancho de 0.10s (ancho) debería dar un jitter notable (~0.03s)
-        # Un ancho de 0.04s (estrecho) debería dar un jitter mínimo (~0.005s)
         scaling_factor = 0.4 
 
         for i, t_beat in enumerate(beat_times_sec):
@@ -152,10 +156,12 @@ class RealECGLoader:
 
         # 4. Formatear y Ordenar (Obligatorio para Brian2)
         all_indices = np.array(indices, dtype=int)
-        all_times = np.array(times) * b2.second
-        sort_idx = np.argsort(all_times)
+        # Asegurar ordenado con valores numéricos (segundos) antes de reconstruir unidades
+        all_times_sec = np.array(times, dtype=float)
+        sort_idx = np.argsort(all_times_sec)
+        all_times = all_times_sec[sort_idx] * b2.second
         
-        return all_indices[sort_idx], all_times[sort_idx]
+        return all_indices[sort_idx], all_times
 
     def validate_detection(self, my_times_b2, record_name):
         import wfdb
@@ -166,9 +172,11 @@ class RealECGLoader:
             except:
                 my_times = np.array(my_times_b2)
             
-            # Cargar Ground Truth (médico)
+            # Cargar Ground Truth (médico) y frecuencia de muestreo
+            record = wfdb.rdrecord(record_name, sampfrom=0, pn_dir='mitdb')
+            fs = record.fs
             annotation = wfdb.rdann(record_name, 'atr', sampfrom=0, sampto=360*60, pn_dir='mitdb')
-            real_times = annotation.sample / 360.0
+            real_times = annotation.sample / fs
             max_sim_time = np.max(my_times) if len(my_times) > 0 else 10
             real_times = real_times[real_times <= max_sim_time]
             

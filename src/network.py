@@ -4,6 +4,12 @@ Created on Fri Jan  2 20:12:23 2026
 
 @author: ggv16
 """
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Jan  2 20:12:23 2026
+
+@author: ggv16
+"""
 import brian2 as b2
 
 def build_network(n_input=90, n_output=10, spike_indices=None, spike_times=None, 
@@ -35,7 +41,7 @@ def build_network(n_input=90, n_output=10, spike_indices=None, spike_times=None,
         'dA_minus': 1.5 * b2.mV,
         
         # Inhibición
-        'w_inhib': 50.0 * b2.mV  # ¡Inhibición fuerte para la competencia!
+        'w_inhib': 140.0 * b2.mV  # ¡Inhibición fuerte para la competencia!
     }
 
     # =========================================================
@@ -49,8 +55,7 @@ def build_network(n_input=90, n_output=10, spike_indices=None, spike_times=None,
     # =========================================================
     # 3. CAPA DE SALIDA (Cerebro) - CON TAU VARIABLE
     # =========================================================
-    # Fíjate que 'tau_m' ahora se define como variable (: second) 
-    # y no como constante en el namespace.
+    # 'tau_m' definido como variable por neurona
     eqs_lif = '''
     dv/dt = (v_rest - v) / tau_m : volt (unless refractory)
     tau_m : second
@@ -73,7 +78,7 @@ def build_network(n_input=90, n_output=10, spike_indices=None, spike_times=None,
         
         # EQUIPO B: INTEGRADORES TEMPORALES (ARRITMIA)
         # Memoria larga. Pueden sumar spikes dispersos (Jitter/Ancho).
-        output_group.tau_m[mid_point:] = 80 * b2.ms
+        output_group.tau_m[mid_point:] = 70 * b2.ms
         
         print(f" 🎭 PERSONALIDADES CONFIGURADAS (NO SUPERVISADO):")
         print(f"    -> Neuronas 0-{mid_point-1}: Tau=10ms (Especialistas en Sincronía/Sano)")
@@ -91,8 +96,10 @@ def build_network(n_input=90, n_output=10, spike_indices=None, spike_times=None,
     dapost/dt = -apost/tau_post : 1 (clock-driven)
     '''
     if learning_enabled:
+        # NOTA: se elimina el guard "int(not_refractory_post)" porque no estaba definido.
+        # Brian2 controla refractariedad a nivel de NeuronGroup; aquí aplicamos w directamente.
         on_pre_eq = '''
-        v_post += w * int(not_refractory_post)
+        v_post += w
         apre += 1
         w = clip(w - dA_minus * apost, 0*mV, w_max)
         '''
@@ -101,7 +108,7 @@ def build_network(n_input=90, n_output=10, spike_indices=None, spike_times=None,
         w = clip(w + dA_plus * apre, 0*mV, w_max)
         '''
     else:
-        on_pre_eq = 'v_post += w * int(not_refractory_post)'
+        on_pre_eq = 'v_post += w'
         on_post_eq = ''
 
     synapses = b2.Synapses(input_group, output_group, model=eqs_stdp,
@@ -129,14 +136,12 @@ def build_network(n_input=90, n_output=10, spike_indices=None, spike_times=None,
         team_slow = output_group[mid_point:]   # Arritmia
         
         # A. Si el Rápido dispara -> Calla al Lento
-        # (Prioridad a la sincronía: si es sano, el lento no debe "confundirse")
         inhib_synapses_A_to_B = b2.Synapses(team_fast, team_slow,
                                             on_pre='v_post -= w_inhib',
                                             namespace=params, name='Inhib_Fast_to_Slow')
         inhib_synapses_A_to_B.connect() # Todos contra todos
         
         # B. Si el Lento dispara -> Calla al Rápido
-        # (Winner-Take-All: si ya detecté arritmia, tú cállate)
         inhib_synapses_B_to_A = b2.Synapses(team_slow, team_fast,
                                             on_pre='v_post -= w_inhib',
                                             namespace=params, name='Inhib_Slow_to_Fast')

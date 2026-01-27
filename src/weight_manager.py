@@ -11,162 +11,190 @@ Weight Manager: Guardar, cargar y comparar pesos sinápticos
 Este módulo permite persistir el estado de la red entrenada
 para usarla después en modo reconocimiento.
 """
+# -*- coding: utf-8 -*-
+"""
+Weight Manager (comentado)
+Funciones para guardar, cargar y listar pesos sinápticos de la red.
+Diseño:
+ - Guardamos las magnitudes de los pesos en mV (floats) junto con la topología (i, j).
+ - Uso de una carpeta consistente (get_weights_dir) relativa al proyecto.
+ - Compatibilidad con archivos antiguos/formatos distintos mediante comprobaciones.
+"""
 import numpy as np
 import pickle
 import os
 from datetime import datetime
 import brian2 as b2
 
-
-
-#  AÑADIR AL INICIO DEL ARCHIVO 
 def get_weights_dir():
     """
-    Obtiene la ruta de la carpeta de pesos, creándola si no existe.
-    
-    Usa ruta relativa al archivo actual, así funciona en cualquier PC.
-    
+    Devuelve la ruta absoluta de la carpeta 'saved_weights' dentro del proyecto.
+    - Usa __file__ para obtener la ubicación del archivo actual (src/).
+    - Sube un nivel para obtener la raíz del proyecto y crea saved_weights/ si no existe.
+    Esto evita crear la carpeta en lugares inesperados cuando el script se ejecuta
+    desde otra ruta de trabajo.
     Returns:
-        str: Ruta absoluta de la carpeta saved_weights/
+        str: Ruta absoluta a saved_weights/
     """
-    # __file__ = ruta de weight_manager.py
-    # os.path.dirname(__file__) = carpeta src/
-    # os.path.dirname(os.path.dirname(__file__)) = carpeta del proyecto/
-    
-    # Obtener carpeta raíz del proyecto
+    # project_root = carpeta que contiene la carpeta src/
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    
-    # Crear ruta a saved_weights/
     weights_dir = os.path.join(project_root, "saved_weights")
-    
-    # Crear carpeta si no existe
-    os.makedirs(weights_dir, exist_ok=True)
-    
+    os.makedirs(weights_dir, exist_ok=True)  # crear si falta
     return weights_dir
 
 def save_weights(network_dict, filename=None, metadata=None):
     """
-    Guarda los pesos sinápticos en un archivo .pkl
-    
+    Guarda los pesos y la topología de la red en un archivo .pkl.
+    Estrategia:
+      - Convertir los pesos a magnitudes en mV (float) antes de guardar.
+      - Guardar índices i,j de las sinapsis para poder reconstruir la topología.
+      - Añadir metadata opcional (por ejemplo: pattern, duration_ms).
     Args:
-        network_dict: Diccionario retornado por build_network()
-        filename: Nombre del archivo (si None, genera automático con timestamp)
-        metadata: Diccionario con información adicional (opcional)
-            Ejemplo: {'pattern': 'A', 'duration_ms': 5000, 'description': '...'}
-    
+      network_dict: Diccionario retornado por build_network() que contiene 'synapses'.
+      filename: Nombre del archivo. Si None, se genera con timestamp.
+      metadata: Diccionario con información adicional.
     Returns:
-        str: Ruta completa del archivo guardado
-    
-    Ejemplo:
-        >>> objs = build_network(...)
-        >>> # Entrenar...
-        >>> save_weights(objs, "mi_red_entrenada.pkl", {'notas': 'Primera prueba'})
+      str: Ruta completa del archivo guardado.
+    Notas:
+      - Guardar magnitudes (floats) evita problemas con pickling de objetos con unidades.
+      - Al guardar la unidad explícita ('mV') facilitamos la carga segura luego.
     """
     synapses = network_dict['synapses']
+    weights_dir = get_weights_dir()
+
+    # Generar nombre si no se pasó
+    if filename is None:
+        filename = datetime.now().strftime("weights_%Y%m%d_%H%M%S.pkl")
+
+    filepath = os.path.join(weights_dir, filename)
     
-    # Creamos la carpeta si no existe
-    os.makedirs("saved_weights", exist_ok=True)
-    filepath = os.path.join("saved_weights", filename)
+    # Convertimos los pesos a magnitud en mV como array de floats
+    # np.array(synapses.w) devuelve los valores, pero pueden perder unidades; 
+    # aquí garantizamos la conversión a float en mV.
+    weights_mV = (np.array(synapses.w) / b2.mV).astype(float)  # array de floats (sin unidades)
     
     data = {
-        'weights': np.array(synapses.w),  # Los valores de los pesos
-        #  ESTO ES LO NUEVO: Guardamos el mapa de conexiones
-        'indices_i': np.array(synapses.i), # Quién envía (pre)
-        'indices_j': np.array(synapses.j), # Quién recibe (post)
-        'metadata': metadata
+        'weights_mV': weights_mV,                      # pesos en mV (floats)
+        'unit': 'mV',                                  # unidad declarada
+        'indices_i': np.array(synapses.i, dtype=int),  # pre-synaptic indices
+        'indices_j': np.array(synapses.j, dtype=int),  # post-synaptic indices
+        'metadata': metadata,                          # metadata opcional
+        'format_version': 1                             # versionado del formato
     }
-    
+
+    # Escribir archivo binario con pickle
     with open(filepath, 'wb') as f:
         pickle.dump(data, f)
-    
-    print(f" Guardado: {filename} ({len(synapses)} sinapsis y su topología)")
+
+    print(f" Guardado: {filepath} ({len(synapses)} sinapsis)")
+    return filepath
 
 def load_topology(filename):
     """
-     FUNCIÓN NUEVA:
-    Carga SOLO los índices de conexión para poder construir la red igual.
-    """
-    filepath = os.path.join("saved_weights", filename)
-    
-    if not os.path.exists(filepath):
-        raise FileNotFoundError(f"No se encuentra: {filepath}")
-        
-    with open(filepath, 'rb') as f:
-        data = pickle.load(f)
-        
-    return data['indices_i'], data['indices_j']
-
-
-def load_weights(network_dict, filename):
-    filepath = os.path.join("saved_weights", filename)
-    synapses = network_dict['synapses']
-    
-    with open(filepath, 'rb') as f:
-        data = pickle.load(f)
-    
-    saved_w = data['weights']
-    saved_i = data['indices_i']
-    saved_j = data['indices_j']
-    
-    print(f"📂 Archivo tiene {len(saved_w)} pesos.")
-    print(f"🧠 La red tiene {len(synapses)} sinapsis actualmente.")
-
-    # CASO A: La red ya se construyó con topología (en build_network)
-    if len(synapses) == len(saved_w):
-        print("   -> Estructura correcta detectada. Asignando valores...")
-        # ⭐⭐⭐ CRÍTICO: Verificar si saved_w ya tiene unidades
-        if hasattr(saved_w, 'dim'):  # Ya tiene unidades de Brian2
-            synapses.w = saved_w
-        else:  # Es un array de NumPy sin unidades
-            synapses.w = saved_w * b2.volt  # ⭐ Añadir unidades
-        
-    # CASO B: La red está vacía o descoordinada (hubo error o no se pasó topology)
-    elif len(synapses) == 0:
-        print("   -> Red vacía. Reconstruyendo conexiones...")
-        synapses.connect(i=saved_i, j=saved_j)
-    
-        if hasattr(saved_w, 'dim'):
-            synapses.w = saved_w
-        else:
-            synapses.w = saved_w * b2.volt  # ⭐ Añadir unidades
-        
-    # CASO C: Desastre (tienes el doble, o un número distinto)
-    else:
-        # Si tienes 2128, es que se duplicaron. Lo arreglamos "a lo bruto" para que corra
-        if len(synapses) > len(saved_w):
-            print("⚠️ AVISO: Detectadas más sinapsis de las guardadas (¿Duplicación?).")
-            print("   -> Intentando asignar solo a las primeras...")
-            # Esto es un parche, lo ideal es que main.py no duplique
-            if hasattr(saved_w, 'dim'):
-                synapses.w[:len(saved_w)] = saved_w
-            else:
-                synapses.w[:len(saved_w)] = saved_w * b2.volt  # ⭐ Añadir unidades
-        else:
-            raise ValueError(f"❌ Error de Topología: Red={len(synapses)}, Archivo={len(saved_w)}")
-    
-    # ⭐⭐⭐ Verificación con unidades correctas
-    peso_max = np.max(synapses.w)
-    print(f"✅ Pesos cargados correctamente. Máx: {np.max(synapses.w)}")
-    
-def list_saved_weights():
-    """
-    Lista todos los archivos de pesos guardados.
-    
+    Carga sólo la topología (indices_i, indices_j) desde un archivo guardado.
+    Útil para construir la red con la misma topología antes de asignar pesos.
+    Args:
+        filename: Nombre del archivo dentro de saved_weights/
     Returns:
-        list: Lista de nombres de archivo disponibles
-    
-    Ejemplo:
-        >>> list_saved_weights()
-        ['weights_20260103_143025.pkl', 'pattern_A_trained.pkl']
+        tuple: (indices_i, indices_j) como arrays numpy.
+    Raises:
+        FileNotFoundError: si no existe el archivo.
     """
     weights_dir = get_weights_dir()
-    
+    filepath = os.path.join(weights_dir, filename)
+    if not os.path.exists(filepath):
+        raise FileNotFoundError(f"No se encuentra: {filepath}")
+    with open(filepath, 'rb') as f:
+        data = pickle.load(f)
+    return data.get('indices_i'), data.get('indices_j')
+
+def load_weights(network_dict, filename):
+    """
+    Carga los pesos desde un archivo y los asigna a network_dict['synapses'].
+    Este proceso es robusto ante:
+      - Archivos con el nuevo formato ('weights_mV' + 'unit').
+      - Archivos antiguos que hubieran guardado 'weights' (posible variedad de formatos).
+    Comportamientos:
+      - Si la topología actual tiene el mismo número de sinapsis que el archivo, asigna directamente.
+      - Si la red está vacía (0 sinapsis) y el archivo contiene indices_i/j, reconstruye las conexiones antes de asignar.
+      - Si la red tiene más sinapsis que el archivo, asigna los primeros len(saved_w) pesos (parche).
+      - En otros casos lanza un ValueError para evitar silent failures.
+    Args:
+      network_dict: Diccionario que contiene 'synapses' (objetos de Brian2).
+      filename: Nombre del archivo dentro de saved_weights/.
+    Raises:
+      FileNotFoundError, ValueError
+    """
+    weights_dir = get_weights_dir()
+    filepath = os.path.join(weights_dir, filename)
+    synapses = network_dict['synapses']
+
+    if not os.path.exists(filepath):
+        raise FileNotFoundError(f"No se encuentra: {filepath}")
+
+    with open(filepath, 'rb') as f:
+        data = pickle.load(f)
+
+    # -- Compatibilidad y reconstrucción del objeto saved_w con unidades --
+    if 'weights_mV' in data:
+        # Formato nuevo esperado: guardamos magnitudes en mV
+        saved_magnitudes = np.array(data['weights_mV'], dtype=float)
+        saved_unit = data.get('unit', 'mV')
+        # Si la unidad en el archivo no es mV, alertamos (puedes ampliar conversión)
+        if saved_unit != 'mV':
+            raise ValueError(f"Unidad inesperada en archivo: {saved_unit}")
+        saved_w = saved_magnitudes * b2.mV  # reconstruimos como Quantity de Brian2
+    else:
+        # Soportar archivos antiguos que tienen 'weights' (posible comportamiento heterogéneo)
+        saved_w = data.get('weights')
+        if saved_w is None:
+            raise ValueError("Archivo de pesos inválido: no contiene 'weights' ni 'weights_mV'.")
+        # Si saved_w ya tiene unidades (es una Quantity), dejamos tal cual
+        if hasattr(saved_w, 'dim'):
+            # saved_w es una magnitud con unidades de Brian2 -> ok
+            pass
+        else:
+            # Asumimos que es array numérico (float) y por compatibilidad tratamos como mV
+            saved_w = np.array(saved_w) * b2.mV
+
+    # Extraer topología si está presente
+    saved_i = data.get('indices_i', None)
+    saved_j = data.get('indices_j', None)
+
+    # -- Asignación robusta --
+    len_saved = len(saved_w)
+    len_current = len(synapses)
+
+    if len_current == len_saved:
+        # Asignación directa
+        synapses.w = saved_w
+        print("   -> Estructura coincidente: asignación directa de pesos.")
+    elif len_current == 0 and saved_i is not None and saved_j is not None:
+        # La red aún no tiene conexiones: conectar con la topología guardada
+        print("   -> La red está vacía: reconstruyendo conexiones desde la topología guardada.")
+        synapses.connect(i=saved_i, j=saved_j)
+        synapses.w = saved_w
+    elif len_current > len_saved:
+        # Parche temporal: asignar a las primeras posiciones
+        print("⚠️ ADVERTENCIA: Más sinapsis en la red que en el archivo; asignando parcialmente.")
+        synapses.w[:len_saved] = saved_w
+    else:
+        # No es posible reconciliar topologías (menos sinapsis en archivo que la red actual)
+        raise ValueError(f"Error de Topología: Red={len_current}, Archivo={len_saved}")
+
+    # Verificación final (impresa): imprimimos el máximo para confirmar la carga
+    print(f"✅ Pesos cargados correctamente. Máx: {np.max(synapses.w)}")
+
+def list_saved_weights():
+    """
+    Lista los archivos .pkl disponibles en saved_weights/.
+    Retorna la lista de nombres de archivo.
+    """
+    weights_dir = get_weights_dir()
     if not os.path.exists(weights_dir):
         print(f" No hay carpeta de pesos en: {weights_dir}")
         return []
-    
     files = [f for f in os.listdir(weights_dir) if f.endswith('.pkl')]
-    
     if not files:
         print(f" Carpeta vacía: {weights_dir}")
     else:
@@ -175,79 +203,4 @@ def list_saved_weights():
             filepath = os.path.join(weights_dir, f)
             size_kb = os.path.getsize(filepath) / 1024
             print(f"   - {f} ({size_kb:.1f} KB)")
-    
     return files
-
-
-def compare_weights(weights_before, weights_after, pattern_synapses_mask):
-    """
-    Compara pesos antes y después del entrenamiento.
-    
-    Esta función calcula estadísticas del cambio en los pesos,
-    separando las sinapsis del patrón de las del ruido.
-    
-    Args:
-        weights_before: Array de pesos iniciales (antes de entrenar)
-        weights_after: Array de pesos finales (después de entrenar)
-        pattern_synapses_mask: Array booleano [True, False, True, ...]
-            True = sinapsis pertenece al patrón
-            False = sinapsis es ruido
-    
-    Returns:
-        dict: Estadísticas del cambio
-            - pattern_avg_change: Cambio promedio en pesos del patrón
-            - noise_avg_change: Cambio promedio en pesos del ruido
-            - separation: Diferencia entre ambos
-            - pattern_final_avg: Peso final promedio del patrón
-            - noise_final_avg: Peso final promedio del ruido
-    
-    Ejemplo:
-        >>> weights_before = network['synapses'].w[:].copy()
-        >>> # Entrenar...
-        >>> weights_after = network['synapses'].w[:]
-        >>> mask = network['synapses'].i[:] < pattern_size  # True si es patrón
-        >>> stats = compare_weights(weights_before, weights_after, mask)
-    """
-    # 1. CALCULAR CAMBIO (delta)
-    # Delta positivo = peso aumentó
-    # Delta negativo = peso disminuyó
-    delta = weights_after - weights_before
-    
-    # 2. SEPARAR PATRÓN Y RUIDO USANDO LA MÁSCARA
-    # Cambio promedio en sinapsis del patrón
-    pattern_change = delta[pattern_synapses_mask].mean()
-    
-    # Cambio promedio en sinapsis del ruido (~mask invierte la máscara)
-    noise_change = delta[~pattern_synapses_mask].mean()
-    
-    # 3. CALCULAR SEPARACIÓN
-    # Separación = qué tan diferente terminaron los pesos del patrón vs ruido
-    # Valores altos = buen aprendizaje
-    # Valores bajos = no hay diferencia (no aprendió)
-    
-    # 4. EMPAQUETAR ESTADÍSTICAS
-    stats = {
-        'pattern_avg_change': float(pattern_change / b2.mV),  # Convertir a float
-        'noise_avg_change': float(noise_change / b2.mV),
-        'separation': float((pattern_change - noise_change) / b2.mV),
-        'pattern_final_avg': float(weights_after[pattern_synapses_mask].mean() / b2.mV),
-        'noise_final_avg': float(weights_after[~pattern_synapses_mask].mean() / b2.mV)
-    }
-    
-    # 5. MOSTRAR RESULTADOS
-    print("\n  Cambio en pesos:")
-    print(f"   Patrón: {stats['pattern_avg_change']:+.3f} mV "
-          f"(final: {stats['pattern_final_avg']:.3f} mV)")
-    print(f"   Ruido:  {stats['noise_avg_change']:+.3f} mV "
-          f"(final: {stats['noise_final_avg']:.3f} mV)")
-    print(f"   Separación: {stats['separation']:.3f} mV")
-    
-    # Interpretación
-    if stats['separation'] > 0.5:
-        print("    Buen aprendizaje (patrón >> ruido)")
-    elif stats['separation'] > 0.2:
-        print("     Aprendizaje moderado")
-    else:
-        print("    Poco o ningún aprendizaje")
-    
-    return stats

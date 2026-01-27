@@ -3,6 +3,11 @@
 Created on Fri Jan  2 20:08:42 2026
 @author: ggv16
 """
+# -*- coding: utf-8 -*-
+"""
+Created on Fri Jan  2 20:08:42 2026
+@author: ggv16
+"""
 import brian2 as b2
 import numpy as np
 
@@ -73,14 +78,24 @@ if __name__ == '__main__':
         print(f"   🔄 Época {epoch+1}/{NUM_EPOCHS} | Ritmo: {current_bpm:.1f} BPM | Spikes: {len(indices_train)}")
         
         # D. CORRECCIÓN TEMPORAL (CRÍTICO PARA QUE FUNCIONE) ⏱️
-        # Obtenemos la hora actual del reloj de la simulación
-        current_sim_time = objs_train['net'].t
+        # Obtenemos la hora actual del reloj de la simulación (en segundos, float)
+        current_sim_time_s = float(objs_train['net'].t / b2.second)
         
-        # Sumamos la hora actual a los spikes para que ocurran AHORA
-        times_adjusted = times_train + current_sim_time
+        # Asegurarnos de que times_train está en segundos como numpy array (float)
+        # - Si times_train tiene unidades de Brian2, convertir: times_train = np.array(times_train / b2.second)
+        try:
+            # Si times_train es una Quantity, esto funcionará
+            times_train_sec = np.array(times_train / b2.second, dtype=float)
+        except Exception:
+            # Si ya es un array de floats, esto simplemente lo convierte a numpy array
+            times_train_sec = np.array(times_train, dtype=float)
         
-        # Inyectamos los datos ajustados
-        objs_train['input'].set_spikes(indices_train, times_adjusted)
+        # Sumamos la hora actual (en segundos) a los spikes para que ocurran AHORA
+        times_adjusted_sec = times_train_sec + current_sim_time_s
+        
+        # Inyectamos los datos ajustados: set_spikes espera tiempos con unidades (b2.second) o floats relativos a la simulación.
+        # Aquí pasamos cantidades con unidades para mayor seguridad.
+        objs_train['input'].set_spikes(indices_train, times_adjusted_sec * b2.second)
 
         # E. Ejecutar simulación (Usando tu función run_simulation)
         run_simulation(objs_train, duration=DURACION_TRAIN)
@@ -90,7 +105,7 @@ if __name__ == '__main__':
     meta = {'description': 'ECG Training Sim-to-Real', 'epochs': NUM_EPOCHS}
     save_weights(objs_train, filename=WEIGHTS_FILE, metadata=meta)
     print("✅ Entrenamiento finalizado y guardado.")    
-
+    
     # ==========================================
     # FASE 2: VALIDACIÓN CLÍNICA (Mundo Real)
     # ==========================================

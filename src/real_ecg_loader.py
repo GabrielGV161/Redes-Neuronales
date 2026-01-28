@@ -96,72 +96,106 @@ class RealECGLoader:
         
         return width_seconds
 
-    def ecg_to_spikes(self, record_name='100', duration_sec=5, use_annotations=False):
+    def ecg_to_spikes(self, input_data, fs=360.0, duration_sec=10):
         """
-        Convierte ECG a spikes basándose en la FÍSICA de la señal.
-        QRS Ancho -> Jitter Alto
-        QRS Estrecho -> Jitter Bajo
+        Convierte ECG a Spikes.
+        Args:
+            input_data: Puede ser un STR (nombre del record MIT-BIH) o un ARRAY (señal raw).
+            fs: Frecuencia de muestreo (solo necesaria si input_data es array).
+            duration_sec: Duración a procesar.
         """
-        signal, annotation, fs = self.load_mit_bih_data(record_name, duration_sec)
-        if signal is None: return np.array([]), np.array([]) * b2.ms
-
-        # 1. Detectar Latidos
-        if use_annotations and annotation is not None:
-            print("   📝 Usando anotaciones médicas (Ground Truth)")
-            beat_indices = annotation.sample
-            beat_times_sec = beat_indices / fs
-        else:
-            print("   🕵️‍♂️ Usando algoritmo de Energía (Autónomo)")
-            beat_indices = self.detect_r_peaks(signal, fs)
-            beat_times_sec = beat_indices / fs
-
-        print(f"   ❤️ Latidos detectados: {len(beat_times_sec)}")
-
-        # 2. Generación de Spikes con Jitter Dinámico
-        indices = []
-        times = []
-        neurons_pattern = 40 
+        import wfdb
+        import numpy as np
         
-        # Factor de conversión: Ancho real (s) -> Jitter (sigma)
-        scaling_factor = 0.4 
+        try:
+            # --- CASO 1: Es un nombre de archivo (String) ---
+            if isinstance(input_data, str):
+                # Usamos la función interna para cargar y normalizar
+                # CORRECCIÓN: load_mit_bih_data devuelve 3 valores (signal, times, annotations)
+                # Usamos un comodín (*) para ignorar lo que sobre, o recogemos la tupla.
+                loaded_data = self.load_mit_bih_data(input_data, duration_sec)
+                
+                # Asumimos que el primer elemento es la señal
+                signal = loaded_data[0]
+                
+                # MIT-BIH siempre es 360 Hz (si tu load_mit_bih_data no devuelve fs, usamos 360)
+                # Si tu función load_mit_bih_data devolviera fs, ajustaríamos aquí.
+                record_fs = 360.0 
+                fs = record_fs
+                
+            # --- CASO 2: Es una señal directa (Array/Numpy) ---
+            elif isinstance(input_data, (np.ndarray, list)):
+                signal = np.array(input_data)
+                # Aquí confiamos en el 'fs' que nos pasan como argumento
+                
+            else:
+                raise ValueError("input_data debe ser nombre de registro (str) o señal (array)")
 
-        for i, t_beat in enumerate(beat_times_sec):
-            idx = beat_indices[i]
+            # -----------------------------------------------------------
+            # A PARTIR DE AQUÍ, EL PROCESO ES IGUAL PARA AMBOS CASOS
+            # -----------------------------------------------------------
             
-            # --- FÍSICA: Medir el ancho real del latido ---
-            qrs_width = self.measure_qrs_width(signal, idx, fs)
+            # 1. Detectar Picos (Algoritmo de Energía)
+            peaks = self.detect_r_peaks(signal, fs)
             
-            # Calculamos el jitter proporcional
-            sigma_jitter = qrs_width * scaling_factor
+            # 2. Medir Ancho (FWHM) y Mapear a Jitter
+            indices = []
+            times = []
             
-            # Limites de seguridad para que no sea ni 0 ni infinito
-            sigma_jitter = np.clip(sigma_jitter, 0.002, 0.050)
+            for r_peak in peaks:
+                # Ventana de 100ms alrededor del pico
+                window_samples = int(0.100 * fs)
+                start = max(0, r_peak - window_samples)
+                end = min(len(signal), r_peak + window_samples)
+                
+                beat_window = signal[start:end]
+                if len(beat_window) < 5: continue
+                
+                # Calcular FWHM (Full Width at Half Maximum)
+                peak_val = signal[r_peak]
+                half_max = peak_val / 2.0
+                # Cruces por el valor medio
+                crossings = np.where(np.diff(np.sign(beat_window - half_max)))[0]
+                
+                width_ms = 0
+                if len(crossings) >= 2:
+                    width_samples = crossings[-1] - crossings[0]
+                    width_ms = (width_samples / fs) * 1000
+                else:
+                    width_ms = 20 # Valor por defecto si falla el cálculo
+                
+                # --- MAPEO FÍSICO: ANCHO -> JITTER ---
+                if width_ms < 40: # QRS Estrecho (Sano)
+                    jitter = 5e-3 # 5ms
+                else:             # QRS Ancho (Arritmia/PVC)
+                    jitter = 25e-3 # 25ms
+                
+                # Generar 40 spikes para este latido
+                for i in range(self.n_input):
+                    t_spike = (r_peak / fs) + np.random.normal(0, jitter)
+                    if 0 <= t_spike < duration_sec:
+                        indices.append(i)
+                        times.append(t_spike)
             
-            # Logging para ver qué está pasando (solo primeros latidos)
-            if i < 3:
-                tipo = "ANCHO/ARRITMIA" if qrs_width > 0.08 else "ESTRECHO/SANO"
-                print(f"      📍 Latido {i}: Ancho={qrs_width*1000:.1f}ms -> Jitter={sigma_jitter*1000:.1f}ms [{tipo}]")
-
-            # Generar los 40 spikes para este latido
-            for n_idx in range(neurons_pattern):
-                spike_time = t_beat + np.random.normal(0, sigma_jitter)
-                if 0 < spike_time < duration_sec:
-                    indices.append(n_idx)
-                    times.append(spike_time)
-
-        # 3. Ruido de Fondo (SNN no vive en el vacío)
-        n_noise = int(self.n_input * duration_sec * 0.5) # 0.5 Hz de ruido base
-        indices.extend(np.random.randint(0, self.n_input, n_noise))
-        times.extend(np.random.uniform(0, duration_sec, n_noise))
-
-        # 4. Formatear y Ordenar (Obligatorio para Brian2)
-        all_indices = np.array(indices, dtype=int)
-        # Asegurar ordenado con valores numéricos (segundos) antes de reconstruir unidades
-        all_times_sec = np.array(times, dtype=float)
-        sort_idx = np.argsort(all_times_sec)
-        all_times = all_times_sec[sort_idx] * b2.second
-        
-        return all_indices[sort_idx], all_times
+            # 3. Ruido de Fondo (Reducido al 5%)
+            n_noise = int(self.n_input * duration_sec * 0.05) 
+            indices.extend(np.random.randint(0, self.n_input, n_noise))
+            times.extend(np.random.uniform(0, duration_sec, n_noise))
+            
+            # 4. ORDENAMIENTO TEMPORAL ESTRICTO (Fix crítico para Brian2)
+            # Quitamos unidades, ordenamos y devolvemos números puros (segundos)
+            # para que 'main.py' luego les ponga *b2.second
+            all_times = np.array(times)
+            sort_idx = np.argsort(all_times)
+            
+            indices = np.array(indices)[sort_idx]
+            times = all_times[sort_idx]
+            
+            return indices, times
+            
+        except Exception as e:
+            print(f"❌ Error en ecg_to_spikes: {e}")
+            return [], []
 
     def validate_detection(self, my_times_b2, record_name):
         import wfdb
@@ -192,14 +226,14 @@ class RealECGLoader:
                         current_cluster.append(t)
                     else:
                         # FIN DEL CLUSTER ANTERIOR
-                        # FILTRO: Un latido real debe tener al menos 5 spikes (ignoramos ruido suelto)
-                        if len(current_cluster) >= 5: 
+                        # FILTRO: Un latido real debe tener al menos 15 spikes (ignoramos ruido suelto)
+                        if len(current_cluster) >= 15: 
                             my_beats.append(np.mean(current_cluster))
                         
                         current_cluster = [t] # Empezamos nuevo cluster
                 
                 # Chequear el último
-                if len(current_cluster) >= 5:
+                if len(current_cluster) >= 15:
                     my_beats.append(np.mean(current_cluster))
             
             print(f"\n   ⚖️  VALIDACIÓN DE ETIQUETADO (Ground Truth):")

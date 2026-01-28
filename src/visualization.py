@@ -164,64 +164,56 @@ def plot_results(d, pattern_size=3, max_neurons_voltage=5,
     print("\n=== DIAGNÓSTICO ===")
     print(f"Spikes de salida: {n_spikes}")
     
-def plot_recognition_comparison(data_trained, data_novel, v_threshold_mv=-50.0, title="Diagnóstico SNN"):
+def plot_recognition_comparison(res_trained, res_novel, v_threshold_mv=None):
     """
-    Pinta las trazas de voltaje separando equipos por color.
-    
-    Args:
-        v_threshold_mv (float): Valor del umbral en mV (ej: -50). La línea roja se ajustará a esto.
+    Pinta las trazas de voltaje separando equipos por color (Verde=Sano, Rojo=Arritmia).
+    Versión robusta y optimizada.
     """
-    
-    fig, axs = plt.subplots(1, 2, figsize=(14, 6), sharey=True)
-    fig.suptitle(title, fontsize=16, fontweight='bold')
-    
-    # Definimos punto medio para separar equipos (asumiendo 10 neuronas)
-    n_neurons = data_trained['v'].shape[0] # Filas de la matriz de voltaje
-    mid_point = n_neurons // 2
-    
-    # --- FUNCIÓN AUXILIAR DE PINTADO ---
-    def plot_voltage_lines(ax, data, subtitle):
-        time = data['t']
-        voltages = data['v']
-        
-        # Iteramos por cada neurona para darle su color
-        for i in range(n_neurons):
-            if i < mid_point:
-                # EQUIPO SANO (A) -> VERDE
-                color = 'green'
-                label = 'Equipo Sano' if i == 0 else "" # Solo poner label una vez
-                zorder = 2 # Poner encima
-            else:
-                # EQUIPO ARRITMIA (B) -> ROJO
-                color = '#D62728' # Rojo bonito
-                label = 'Equipo Arritmia' if i == mid_point else ""
-                zorder = 1
-            
-            # Pintamos la línea
-            ax.plot(time, voltages[i, :], color=color, alpha=0.8, linewidth=1.2, label=label, zorder=zorder)
 
-        # Configuración del Eje
-        ax.set_title(subtitle, fontsize=12)
+    # 1. Extracción de datos con unidades corregidas
+    v_trained = res_trained.v / b2.mV 
+    v_novel = res_novel.v / b2.mV
+    t_trained = res_trained.t / b2.ms
+    t_novel = res_novel.t / b2.ms
+
+    n_neurons = v_trained.shape[0] 
+    mid_point = n_neurons // 2 # Aquí definimos el mid_point correctamente
+
+    # 2. Configuración de la figura
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6), sharey=True)
+    fig.suptitle("Diagnóstico SNN: Competencia de Equipos (Verde vs Rojo)", fontsize=14, fontweight='bold')
+
+    # Optimización de velocidad (Downsampling si hay muchos datos)
+    step = 1 if len(t_novel) < 10000 else 10
+
+    # 3. Función interna local para evitar repetir código
+    def draw_team_lines(ax, time, voltage_matrix, title_text):
+        for i in range(n_neurons):
+            color = 'green' if i < mid_point else '#D62728' # Rojo
+            label = ""
+            if i == 0: label = "Equipo Sano"
+            if i == mid_point: label = "Equipo Arritmia"
+            
+            ax.plot(time[::step], voltage_matrix[i, :][::step], 
+                    color=color, alpha=0.6, linewidth=1.0, label=label)
+        
+        ax.set_title(title_text)
         ax.set_xlabel("Tiempo (ms)")
-        ax.set_ylim(-85, v_threshold_mv + 10) # Ajuste automático del eje Y
         ax.grid(True, alpha=0.3)
         
-        # LÍNEA DE UMBRAL DINÁMICA
-        ax.axhline(y=v_threshold_mv, color='red', linestyle='--', linewidth=2, label=f'Umbral ({v_threshold_mv} mV)')
-        
-        # Solo mostrar leyenda en el primer gráfico para no tapar
-        if subtitle == "Reacción ante Estímulo SANO":
-            ax.legend(loc='lower right', frameon=True, fontsize='small')
+        if v_threshold_mv is not None:
+            ax.axhline(y=v_threshold_mv, color='red', linestyle='--', 
+                       linewidth=2, label=f'Umbral ({v_threshold_mv} mV)')
 
-    # --- PANEL IZQUIERDO: RESPUESTA A SANO ---
-    plot_voltage_lines(axs[0], data_trained, "Reacción ante Estímulo SANO")
-    axs[0].set_ylabel("Voltaje de Membrana (mV)")
+    # 4. Ejecutar el dibujado en ambos paneles
+    draw_team_lines(ax1, t_trained, v_trained, "Reacción ante Estímulo SANO")
+    draw_team_lines(ax2, t_novel, v_novel, "Reacción ante Estímulo REAL / ARRITMIA")
 
-    # --- PANEL DERECHO: RESPUESTA A ARRITMIA ---
-    plot_voltage_lines(axs[1], data_novel, "Reacción ante Estímulo ARRITMIA")
-
-    plt.tight_layout()
-    plt.savefig("diagnostico_voltaje_equipos.png")
+    ax1.set_ylabel("Voltaje de Membrana (mV)")
+    ax1.legend(loc='lower left', fontsize='small', frameon=True)
+    
+    plt.tight_layout(rect=[0, 0.03, 1, 0.95]) # Espacio para el título superior
+    plt.savefig("diagnostico_final_snn.png")
     plt.show()
 
 def plot_ecg_validation(signal, fs, spike_times, title="Validación ECG Real"):
@@ -229,9 +221,6 @@ def plot_ecg_validation(signal, fs, spike_times, title="Validación ECG Real"):
     Pinta el ECG original y marca dónde la SNN 've' los latidos.
     CORREGIDO: Gestiona unidades de Brian2 para evitar DimensionMismatchError.
     """
-    import matplotlib.pyplot as plt
-    import brian2 as b2
-    import numpy as np
     
     # --- FIX CRÍTICO: Eliminar unidades de Brian2 ---
     # Si spike_times tiene unidades (es un Quantity), lo pasamos a segundos puros (float)

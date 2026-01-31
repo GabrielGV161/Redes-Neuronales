@@ -1,4 +1,4 @@
-# 🫀 SNN-Arrhythmia-Detector: Neuromorphic ECG Classification
+# SNN-Arrhythmia-Detector: Neuromorphic ECG Classification
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 ![Brian2](https://img.shields.io/badge/Simulator-Brian2-green)
@@ -8,11 +8,11 @@ A bio-inspired **Spiking Neural Network (SNN)** designed to detect cardiac arrhy
 
 ---
 
-## 🔬 Scientific Abstract
+## Scientific Abstract
 
 Standard ECG analysis relies on digital signal processing or heavy deep learning models (CNN/RNN). This project explores a **neuromorphic approach**, encoding analog ECG signals into discrete spike trains. The network employs a competitive **Dual-Population Architecture** with lateral inhibition, where neurons specialize in detecting either synchronous (Healthy) or asynchronous (Arrhythmic) patterns based on the morphological jitter of the QRS complex.
 
-## 🚀 Key Features
+## Key Features
 
 * **Dual-Tau Architecture:** Implements two competing neuronal populations with distinct membrane time constants ($\tau$):
     * **Healthy Team (Low $\tau$):** Acts as a coincidence detector for precise, rhythmic signals.
@@ -21,7 +21,7 @@ Standard ECG analysis relies on digital signal processing or heavy deep learning
 * **Winner-Take-All Competition:** Implements strong lateral inhibition to force decision-making between the diagnostic populations.
 * **Clinical Validation:** Integrated directly with the **MIT-BIH Database** (PhysioNet) to test against real patient records (e.g., Patient 115 vs. Patient 203).
 
-## 📂 Project Structure
+## Project Structure
 
 ```text
 ├── src/

@@ -1,272 +1,148 @@
 # -*- coding: utf-8 -*-
 """
-Created on Fri Jan  2 20:14:40 2026
-
+Created on Sat Jan 17 22:15:00 2026
 @author: ggv16
+
+Module: Neuromorphic Data Visualization
+Description: Generates publication-quality plots for SNN analysis.
+             Handles both Brian2 Monitors and lightweight SimResult objects.
 """
-import matplotlib
-matplotlib.use('Qt5Agg')  # Habilitar ventanas interactivas
-import brian2 as b2
+
 import matplotlib.pyplot as plt
 import numpy as np
+import brian2 as b2
 
-def plot_results(d, pattern_size=3, max_neurons_voltage=5, 
-                 target_output_weights=None, 
-                 weight_plot_mode='average',
-                 duration_ms=None):
+def plot_clinical_validation(sim_result, title="Clinical Diagnosis", 
+                             threshold_sano=-20, threshold_arr=-30):
     """
-    Weight plot mode = ('single','average' or 'heatmap')
+    Plots the membrane potential dynamics from a SimResult object.
+    Focuses on the competition between the 'Healthy' and 'Arrhythmia' teams.
+
+    Args:
+        sim_result: The SimResult object returned by compare_recognition.
+        title (str): Plot title (e.g., "Patient 115").
+        threshold_sano (float): Threshold for Healthy detection (mV).
+        threshold_arr (float): Threshold for Arrhythmia detection (mV).
     """
     
-    mon_in = d['mon_in']
-    mon_out = d['mon_out']
-    mon_v = d['mon_v']
-    mon_w = d['mon_w']
-    synapses = d['synapses'] 
+    # 1. DATA EXTRACTION & UNIT STRIPPING 
     
-    if duration_ms is None:
-        duration_ms = float(mon_in.t[-1] / b2.ms)
-        
-    n_output = mon_v.v.shape[0]
-    n_synapses = len(synapses)
-    
-    # Extraemos índices como arrays de Numpy (rápido)
-    pre_indices = synapses.i[:]
-    post_indices = synapses.j[:]
-    
-    # --- PREPARACIÓN DE MATRIZ DE PESOS (VECTORIZADA) ---
-    # Convertimos TODO a una matriz pura de numpy de una sola vez.
-    # Esto evita acceder a la memoria de Brian2 repetidamente.
-    # Forma: (n_sinapsis, n_tiempos)
-    all_weights_matrix = mon_w.w / b2.mV
-    
-    # Máscaras booleanas (True/False) para identificar tipos
-    is_pattern_synapse = pre_indices < pattern_size
-    
-    # --- INICIO DE GRÁFICOS ---
-    # sharex=True permite que el zoom se aplique a todas las gráficas a la vez
-    fig, (ax1, ax2, ax3, ax4) = plt.subplots(4, 1, figsize=(14, 12), sharex=True)
-    
-    # 1. Raster Plot - INPUT
-    ax1.plot(mon_in.t/b2.ms, mon_in.i, '.k', ms=2, alpha=0.6)
-    ax1.axhline(pattern_size - 0.5, color='blue', linestyle='--', alpha=0.3)
-    ax1.text(0, pattern_size + 2, 'Ruido', color='blue', fontsize=9)
-    ax1.text(0, 1, 'Patrón', color='green', fontsize=9)
-    ax1.set_title('Raster Plot (Input)', fontsize=10, fontweight='bold')
-    ax1.set_ylabel('Neurona ID')
-    
-    # 2. Raster Plot - OUTPUT
-    if len(mon_out.t) > 0:
-        ax2.plot(mon_out.t/b2.ms, mon_out.i, '|r', ms=20, mew=2)
-        ax2.set_ylim(-0.5, n_output - 0.5)
-        n_spikes = len(mon_out.t)
+    # Process Time
+    if hasattr(sim_result.t, 'dim'): # It's a Brian2 quantity
+        times = sim_result.t / b2.ms
+    else: # It's a raw numpy array
+        times = sim_result.t * 1000 
+
+    # Process Voltage
+    if hasattr(sim_result.v, 'dim'):
+        v_traces = sim_result.v / b2.mV
     else:
-        n_spikes = 0
-    ax2.set_title(f'Output Spikes ({n_spikes} total)', fontsize=10, fontweight='bold')
-    ax2.set_ylabel('Neurona ID')
+        v_traces = sim_result.v * 1000
 
-    # 3. Voltaje
-    n_to_plot = min(max_neurons_voltage, n_output)
-    # Aquí usamos un bucle pequeño porque graficamos pocas líneas (5 max)
-    for neuron_idx in range(n_to_plot):
-        ax3.plot(mon_v.t/b2.ms, mon_v.v[neuron_idx]/b2.mV, alpha=0.7, linewidth=1.5)
-    ax3.axhline(-54, color='r', linestyle='--', alpha=0.5, label='Umbral')
-    ax3.set_ylabel('Voltaje (mV)')
-    ax3.set_title('Voltaje de Membrana', fontsize=10, fontweight='bold')
-
-    # 4. Pesos (OPTIMIZADO)
+    # 2. PLOTTING SETUP
+    fig, ax = plt.subplots(figsize=(12, 6))
     
-    if weight_plot_mode == 'single':
-        # --- MODO SINGLE VECTORIZADO ---
-        target = target_output_weights if target_output_weights is not None else 0
-        
-        # 1. Filtramos solo las sinapsis que conectan con nuestro target
-        # Esto crea una máscara booleana instantánea
-        mask_target = post_indices == target
-        
-        # 2. Extraemos los pesos y los tipos (patrón/ruido) usando la máscara
-        weights_target = all_weights_matrix[mask_target]
-        types_target = is_pattern_synapse[mask_target] # True si es patrón, False si es ruido
-        
-        # 3. Graficamos
-        # Matplotlib necesita un bucle para graficar líneas individuales con colores distintos,
-        # pero ya hemos filtrado los datos, así que el bucle es corto.
-        time_array = mon_w.t/b2.ms
-        
-        # Separamos para graficar en bloque (más rápido que ir línea a línea)
-        # Transponemos (.T) para que plot entienda que las columnas son series temporales
-        if np.any(types_target):
-            ax4.plot(time_array, weights_target[types_target].T, 'g-', alpha=0.7, linewidth=1.5)
-            
-        if np.any(~types_target): # ~ es NOT (lo contrario de True)
-            ax4.plot(time_array, weights_target[~types_target].T, 'k-', alpha=0.1, linewidth=0.5)
-            
-        # Líneas fantasma para la leyenda
-        ax4.plot([], [], 'g-', linewidth=2, label='Patrón')
-        ax4.plot([], [], 'k-', linewidth=1, label='Ruido')
-        ax4.set_title(f'Pesos hacia Output {target}', fontsize=10, fontweight='bold')
+    # Determine the split between teams
+    n_neurons = v_traces.shape[0]
+    mid_point = n_neurons // 2
+    
+    # 3. DRAW TRACES
+    # Plot Team Healthy (Green)
+    label_sano = "Team Healthy (Sync)"
+    for i in range(mid_point):
+        ax.plot(times, v_traces[i], color='forestgreen', alpha=0.5, linewidth=1.5,
+                label=label_sano if i == 0 else "")
+    
+    # Plot Team Arrhythmia (Red)
+    label_arr = "Team Arrhythmia (Energy)"
+    for i in range(mid_point, n_neurons):
+        ax.plot(times, v_traces[i], color='firebrick', alpha=0.5, linewidth=1.5,
+                label=label_arr if i == mid_point else "")
 
-    elif weight_plot_mode == 'average':
-        # --- MODO AVERAGE VECTORIZADO ---
-        if np.any(is_pattern_synapse):
-            mean_pattern = np.mean(all_weights_matrix[is_pattern_synapse], axis=0)
-            std_pattern = np.std(all_weights_matrix[is_pattern_synapse], axis=0)
-            
-            ax4.plot(mon_w.t/b2.ms, mean_pattern, 'g-', linewidth=3, label='Patrón (μ)')
-            ax4.fill_between(mon_w.t/b2.ms, 
-                             mean_pattern - std_pattern,
-                             mean_pattern + std_pattern, color='green', alpha=0.2)
-            
-        # ~is_pattern_synapse invierte la máscara (lo que no es patrón, es ruido)
-        if np.any(~is_pattern_synapse):
-            mean_noise = np.mean(all_weights_matrix[~is_pattern_synapse], axis=0)
-            std_noise = np.std(all_weights_matrix[~is_pattern_synapse], axis=0)
-            
-            ax4.plot(mon_w.t/b2.ms, mean_noise, 'k-', linewidth=2, label='Ruido (μ)')
-            ax4.fill_between(mon_w.t/b2.ms, 
-                             mean_noise - std_noise,
-                             mean_noise + std_noise, color='gray', alpha=0.2)
-            
-        ax4.set_title('Evolución Promedio', fontsize=10, fontweight='bold')
+    # 4. CLINICAL BOUNDARIES
+    # Draw the firing thresholds
+    ax.axhline(threshold_sano, color='green', linestyle='--', linewidth=1, alpha=0.8, 
+               label=f'Thresh Healthy ({threshold_sano}mV)')
+    ax.axhline(threshold_arr, color='red', linestyle='--', linewidth=1, alpha=0.8, 
+               label=f'Thresh Arrhythmia ({threshold_arr}mV)')
 
-    elif weight_plot_mode == 'heatmap':
-        # --- MODO HEATMAP VECTORIZADO (SUPER RÁPIDO) ---
-        
-        # 1. Obtenemos los índices ordenados: primero los que son True (patrón), luego False?
-        # argsort ordena de menor a mayor. False(0) < True(1). 
-        # Queremos Patrón arriba. Si patrón es índice bajo, usamos np.argsort directo sobre pre_indices.
-        # Una forma robusta: Concatenar los índices explícitamente.
-        
-        idx_pattern = np.where(is_pattern_synapse)[0]
-        idx_noise = np.where(~is_pattern_synapse)[0]
-        sorted_indices = np.concatenate([idx_pattern, idx_noise])
-        
-        # 2. Reordenamos la matriz entera usando esos índices (Fancy Indexing)
-        weights_sorted = all_weights_matrix[sorted_indices]
-        
-        im = ax4.imshow(weights_sorted, aspect='auto', cmap='viridis', interpolation='nearest',
-                        extent=[0, duration_ms, n_synapses, 0])
-        
-        ax4.axhline(len(idx_pattern), color='red', linestyle='--', label='División')
-        plt.colorbar(im, ax=ax4, label='Peso (mV)')
-        ax4.set_title('Heatmap de Pesos', fontsize=10, fontweight='bold')
-        ax4.set_ylabel('Sinapsis (Agrupadas)')
-
-    ax4.set_xlabel('Tiempo (ms)')
-    if weight_plot_mode != 'heatmap':
-        ax4.set_ylabel('Peso (mV)')
-        ax4.legend(loc='upper left')
+    # 5. STYLING (The "Paper" Look)
+    ax.set_title(f"Neuromorphic Diagnosis: {title}", fontsize=14, fontweight='bold')
+    ax.set_xlabel('Time (ms)', fontsize=12)
+    ax.set_ylabel('Membrane Potential (mV)', fontsize=12)
+    
+    # Zoom in on the relevant voltage range
+    ax.set_ylim(-90, -10)
+    ax.legend(loc='lower right', frameon=True, shadow=True, fontsize=10)
+    
+    ax.grid(True, linestyle=':', alpha=0.6)
     
     plt.tight_layout()
     plt.show()
-    
-    # Estadísticas
-    print("\n=== DIAGNÓSTICO ===")
-    print(f"Spikes de salida: {n_spikes}")
-    
-def plot_recognition_comparison(res_trained, res_novel, v_threshold_mv=None):
+
+def plot_weight_matrices(syn_sano, syn_arr):
     """
-    Pinta las trazas de voltaje separando equipos por color (Verde=Sano, Rojo=Arritmia).
-    Versión robusta y optimizada.
+    Visualizes the learned synaptic weights as heatmaps.
     """
-
-    # 1. Extracción de datos con unidades corregidas
-    v_trained = res_trained.v / b2.mV 
-    v_novel = res_novel.v / b2.mV
-    t_trained = res_trained.t / b2.ms
-    t_novel = res_novel.t / b2.ms
-
-    n_neurons = v_trained.shape[0] 
-    mid_point = n_neurons // 2 # Aquí definimos el mid_point correctamente
-
-    # 2. Configuración de la figura
-    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6), sharey=True)
-    fig.suptitle("Diagnóstico SNN: Competencia de Equipos (Verde vs Rojo)", fontsize=14, fontweight='bold')
-
-    # Optimización de velocidad (Downsampling si hay muchos datos)
-    step = 1 if len(t_novel) < 10000 else 10
-
-    # 3. Función interna local para evitar repetir código
-    def draw_team_lines(ax, time, voltage_matrix, title_text):
-        for i in range(n_neurons):
-            color = 'green' if i < mid_point else '#D62728' # Rojo
-            label = ""
-            if i == 0: label = "Equipo Sano"
-            if i == mid_point: label = "Equipo Arritmia"
-            
-            ax.plot(time[::step], voltage_matrix[i, :][::step], 
-                    color=color, alpha=0.6, linewidth=1.0, label=label)
-        
-        ax.set_title(title_text)
-        ax.set_xlabel("Tiempo (ms)")
-        ax.grid(True, alpha=0.3)
-        
-        if v_threshold_mv is not None:
-            ax.axhline(y=v_threshold_mv, color='red', linestyle='--', 
-                       linewidth=2, label=f'Umbral ({v_threshold_mv} mV)')
-
-    # 4. Ejecutar el dibujado en ambos paneles
-    draw_team_lines(ax1, t_trained, v_trained, "Reacción ante Estímulo SANO")
-    draw_team_lines(ax2, t_novel, v_novel, "Reacción ante Estímulo REAL / ARRITMIA")
-
-    ax1.set_ylabel("Voltaje de Membrana (mV)")
-    ax1.legend(loc='lower left', fontsize='small', frameon=True)
+    fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(14, 5))
     
-    plt.tight_layout(rect=[0, 0.03, 1, 0.95]) # Espacio para el título superior
-    plt.savefig("diagnostico_final_snn.png")
+    def sparse_to_dense(synapses, n_in=90, n_out=5):
+        matrix = np.zeros((n_in, n_out))
+        if len(synapses) == 0: return matrix
+        
+        j_normalized = synapses.j - np.min(synapses.j)
+        weights = synapses.w / b2.mV if hasattr(synapses.w, 'dim') else synapses.w
+        matrix[synapses.i, j_normalized] = weights
+        return matrix
+
+    # Sano Matrix
+    w_matrix_sano = sparse_to_dense(syn_sano)
+    im1 = ax1.imshow(w_matrix_sano.T, aspect='auto', cmap='Greens', interpolation='nearest')
+    ax1.set_title('Learned Weights: Healthy Team', fontsize=11)
+    ax1.set_xlabel('Input Neuron ID')
+    plt.colorbar(im1, ax=ax1, label='Weight (mV)')
+
+    # Arrhythmia Matrix
+    w_matrix_arr = sparse_to_dense(syn_arr)
+    im2 = ax2.imshow(w_matrix_arr.T, aspect='auto', cmap='Reds', interpolation='nearest')
+    ax2.set_title('Learned Weights: Arrhythmia Team', fontsize=11)
+    ax2.set_xlabel('Input Neuron ID')
+    plt.colorbar(im2, ax=ax2, label='Weight (mV)')
+    
+    plt.tight_layout()
     plt.show()
 
-def plot_ecg_validation(signal, fs, spike_times, title="Validación ECG Real"):
+def plot_ecg_validation(raw_signal, fs, spike_times_b2, title="Spike Encoding Validation"):
     """
-    Pinta el ECG original y marca dónde la SNN 've' los latidos.
-    CORREGIDO: Gestiona unidades de Brian2 para evitar DimensionMismatchError.
+    Visualizes the original analog ECG signal overlayed with the generated neural spikes.
+    Useful for demonstrating the temporal precision of the encoding algorithm.
     """
+    # Create time axis for the analog signal
+    times_sec = np.arange(len(raw_signal)) / fs
     
-    # --- FIX CRÍTICO: Eliminar unidades de Brian2 ---
-    # Si spike_times tiene unidades (es un Quantity), lo pasamos a segundos puros (float)
-    try:
-        times_sec = spike_times / b2.second
-    except:
-        # Si ya era float (sin unidades), lo dejamos tal cual
-        times_sec = spike_times
-        
-    # Asegurarnos de que es un array de numpy plano
-    times_sec = np.array(times_sec)
-    # -----------------------------------------------
+    # Handle Brian2 units (strip units if present)
+    if hasattr(spike_times_b2, 'dim'):
+        spikes_sec = spike_times_b2 / b2.second
+    else:
+        spikes_sec = spike_times_b2
+
+    plt.figure(figsize=(10, 4))
     
-    # Crear eje de tiempos para la señal analógica
-    duration = len(signal) / fs
-    t_signal = np.linspace(0, duration, len(signal))
+    # Plot Original Analog Signal
     
-    plt.figure(figsize=(12, 4))
-    plt.plot(t_signal, signal, 'k-', alpha=0.6, label='ECG Real (MIT-BIH)')
+    plt.plot(times_sec, raw_signal, 'k-', alpha=0.6, label='Real ECG (Analog)')
     
-    # Pintar marcas donde hemos generado spikes
-    # Filtramos para pintar solo una línea por latido (clustering visual)
-    clean_times = []
-    last_t = -1.0 # Float puro
+    # Plot Digital Spikes as vertical lines
+    # vlines creates a discrete "barcode" effect matching the SNN input
+    plt.vlines(spikes_sec, ymin=np.min(raw_signal), ymax=np.max(raw_signal), 
+               colors='r', alpha=0.3, linewidth=1, label='SNN Spikes (Digital)')
     
-    # Ordenamos los tiempos limpios
-    for t in np.sort(times_sec):
-        # Ahora t y last_t son floats puros, la resta funciona
-        if t - last_t > 0.1: # Si ha pasado más de 100ms, asumimos nuevo latido
-            clean_times.append(t)
-            last_t = t
-            
-    plt.vlines(clean_times, ymin=np.min(signal), ymax=np.max(signal), 
-               colors='r', linestyles='--', linewidth=1.5, label='Latido Detectado (SNN)')
+    # Styling
+    plt.title(title, fontsize=12, fontweight='bold')
+    plt.xlabel('Time (s)')
+    plt.ylabel('Amplitude (mV)')
+    plt.legend(loc='upper right')
+    plt.grid(True, alpha=0.3, linestyle='--')
     
-    plt.title(title)
-    plt.xlabel("Tiempo (s)")
-    plt.ylabel("Amplitud")
-    plt.legend()
-    plt.grid(True, alpha=0.3)
     plt.tight_layout()
-    
-    filename = f"validation_{title.replace(' ', '_')}.png"
-    plt.savefig(filename)
-    print(f"📈 Gráfica de validación guardada: {filename}")
-    try:
-        plt.show()
-    except:
-        pass
+    plt.show()

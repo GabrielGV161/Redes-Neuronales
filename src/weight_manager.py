@@ -1,32 +1,25 @@
 # -*- coding: utf-8 -*-
 """
 Created on Sat Jan 17 21:57:39 2026
-
 @author: ggv16
+
+Module: Synaptic Weight Manager
+Description: Handles the persistence layer of the SNN.
+             Responsible for serializing (saving) trained synaptic weights and 
+             reconstructing (loading) the exact network topology for inference.
 """
 
-"""
-Weight Manager: Guardar, cargar y comparar pesos sinápticos
-
-Este módulo permite persistir el estado de la red entrenada
-para usarla después en modo reconocimiento.
-"""
-# -*- coding: utf-8 -*-
-"""
-Weight Manager (comentado)
-Funciones para guardar, cargar y listar pesos sinápticos de la red.
-Diseño:
- - Guardamos las magnitudes de los pesos en mV (floats) junto con la topología (i, j).
- - Uso de una carpeta consistente (get_weights_dir) relativa al proyecto.
- - Compatibilidad con archivos antiguos/formatos distintos mediante comprobaciones.
-"""
 import brian2 as b2
 import pickle
 import os
 import numpy as np
 
 def get_weights_dir():
-    # Crea la carpeta saved_weights si no existe
+    """
+    Resolves the absolute path to the 'saved_weights' directory.
+    Ensures cross-platform compatibility and directory existence.
+    """
+    # Navigate to the project root relative to this script location
     root_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     weights_dir = os.path.join(root_dir, 'saved_weights')
     os.makedirs(weights_dir, exist_ok=True)
@@ -34,23 +27,34 @@ def get_weights_dir():
 
 def save_weights(network_objects, filename='weights.pkl', metadata=None):
     """
-    Guarda los pesos de LOS DOS equipos (Sano y Arritmia) por separado.
+    Serializes the state of the trained network to disk.
+    separately stores connectivity matrices (topology) and synaptic strengths (weights)
+    for both the 'Healthy' and 'Arrhythmia' populations.
+
+    Args:
+        network_objects (dict): Dictionary containing the Brian2 Synapse objects.
+        filename (str): Target filename for the pickle archive.
+        metadata (dict, optional): Additional training context (e.g., epoch count, accuracy).
     """
     filepath = os.path.join(get_weights_dir(), filename)
     
-    # Extraemos los objetos del diccionario devuelto por build_network
+    # Extract Synapse Objects from the network dictionary
     syn_sano = network_objects['synapses_sano']
     syn_arr = network_objects['synapses_arr']
     
+    # Structure the data for persistence
+    # We store raw Numpy arrays to avoid Brian2 unit serialization issues
     data = {
         'metadata': metadata,
-        # Guardamos datos del Equipo Sano
+        
+        # Team Healthy: "Sharp-shooter" weights
         'sano': {
-            'indices_i': np.array(syn_sano.i[:]), # Indices neurona entrada
-            'indices_j': np.array(syn_sano.j[:]), # Indices neurona salida
-            'w': np.array(syn_sano.w[:])          # Pesos aprendidos
+            'indices_i': np.array(syn_sano.i[:]), # Pre-synaptic indices
+            'indices_j': np.array(syn_sano.j[:]), # Post-synaptic indices
+            'w': np.array(syn_sano.w[:])          # Learned weights (Voltage)
         },
-        # Guardamos datos del Equipo Arritmia
+        
+        # Team Arrhythmia: "Integrator" weights
         'arritmia': {
             'indices_i': np.array(syn_arr.i[:]),
             'indices_j': np.array(syn_arr.j[:]),
@@ -60,12 +64,24 @@ def save_weights(network_objects, filename='weights.pkl', metadata=None):
     
     with open(filepath, 'wb') as f:
         pickle.dump(data, f)
-    print(f"💾 Pesos guardados en: {filepath}")
+        
+    print(f" Weights successfully serialized to: {filepath}")
 
 def load_weights(network_objects, filename='weights.pkl'):
+    """
+    Reconstructs the trained network topology and injects synaptic weights.
+    
+    This function creates the physical connections (synapses) based on the 
+    stored indices before assigning the weight values. This is critical for 
+    reproducing the exact sparse connectivity pattern learned during training.
+
+    Args:
+        network_objects (dict): Dictionary containing the target (empty) Synapse objects.
+        filename (str): Name of the source weights file.
+    """
     filepath = os.path.join(get_weights_dir(), filename)
     if not os.path.exists(filepath):
-        print(f"❌ Error: No se encontró {filepath}")
+        print(f" Error: Weights file not found at {filepath}")
         return
 
     with open(filepath, 'rb') as f:
@@ -74,31 +90,36 @@ def load_weights(network_objects, filename='weights.pkl'):
     syn_sano = network_objects['synapses_sano']
     syn_arr = network_objects['synapses_arr']
     
-    # --- ESTRATEGIA SEGURA ---
-    # 1. Desactivamos (pero no intentamos escribir en .w todavía)
+    # TOPOLOGY RECONSTRUCTION STRATEGY 
+    
+    # 1. Deactivate Synapses temporarily to prevent simulation artifacts during loading
     syn_sano.active = False 
     syn_arr.active = False
     
-    # 2. Conectamos (Esto crea los "cables" físicos)
-    # connect(i=..., j=...) sobreescribe o añade. 
-    # Como venimos de una red vacía o necesitamos forzar estos índices:
+    # 2. Re-establish Physical Connections (The "Wiring")
+    # The .connect() method creates the synapses between specific neuron pairs (i, j).
+    # This restores the structural memory of the network.
     syn_sano.connect(i=data['sano']['indices_i'], j=data['sano']['indices_j'])
     syn_arr.connect(i=data['arritmia']['indices_i'], j=data['arritmia']['indices_j'])
     
-    # 3. AHORA SÍ cargamos los valores (Una vez que existen los cables)
+    # 3. Inject Synaptic Weights (The "Strength")
+    # We must re-apply the physical units (b2.volt) as they were stripped during saving.
     syn_sano.w = data['sano']['w'] * b2.volt 
     syn_arr.w = data['arritmia']['w'] * b2.volt
     
-    # 4. Reactivamos
+    # 4. Reactivate Synapses for Inference
     syn_sano.active = True
     syn_arr.active = True
     
-    print(f"✅ Memoria restaurada. Sano: {len(syn_sano)} con., Arritmia: {len(syn_arr)} con.")
+    print(f" Memory Restored. Healthy Team: {len(syn_sano)} synapses | Arrhythmia Team: {len(syn_arr)} synapses.")
 
 def load_topology(filename='weights.pkl'):
     """
-    Función auxiliar para saber qué topología cargar si fuera necesario.
-    Devuelve un diccionario con ambas topologías.
+    Helper function to inspect the stored network topology without loading the full model.
+    Useful for debugging connectivity patterns or sparse matrix analysis.
+    
+    Returns:
+        dict: Containing (i, j) index tuples for both populations.
     """
     filepath = os.path.join(get_weights_dir(), filename)
     with open(filepath, 'rb') as f:

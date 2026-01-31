@@ -152,9 +152,12 @@ if __name__ == '__main__':
     loader.validate_detection(t_arr, RECORD_ARRHYTHMIA)
     
     # [OPTIONAL VISUALIZATION] Uncomment to see the Analog-to-Spike conversion
-    raw_sig_arr, _, fs_arr = loader.load_mit_bih_data(RECORD_ARRHYTHMIA, duration_sec=DURATION_TEST/b2.second)
-    plot_ecg_validation(raw_sig_arr, fs_arr, t_arr, title=f"Spike Encoding: Patient {RECORD_ARRHYTHMIA}")
-
+    # raw_sig_arr, _, fs_arr = loader.load_mit_bih_data(RECORD_ARRHYTHMIA, duration_sec=DURATION_TEST/b2.second)
+    # plot_ecg_validation(raw_sig_arr, fs_arr, t_arr, title=f"Spike Encoding: Patient {RECORD_ARRHYTHMIA}")
+    
+    # raw_sig_arr, _, fs_arr = loader.load_mit_bih_data(RECORD_HEALTHY, duration_sec=DURATION_TEST/b2.second)
+    # plot_ecg_validation(raw_sig_arr, fs_arr, t_arr, title=f"Spike Encoding: Patient {RECORD_HEALTHY}")
+    
     # 3. EXECUTE DIAGNOSIS
     print("\n Running SNN Comparative Diagnosis...")
     stats, res_healthy, res_arr = compare_recognition(

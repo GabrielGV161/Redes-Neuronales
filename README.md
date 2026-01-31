@@ -62,13 +62,14 @@ RECORD_ARRHYTHMIA = '200'
 Results & Visualization
 The system provides a real-time clinical report and membrane potential dynamics visualization.
 
-<img width="1200" height="600" alt="Patient_100_Healthy" src="https://github.com/user-attachments/assets/2f127dcb-7e8d-4414-bcc2-a361125970d6" />
+<img width="1200" height="600" alt="Patient_100_Healthy"
+src="https://github.com/user-attachments/assets/2f127dcb-7e8d-4414-bcc2-a361125970d6" />
 
-<img width="1200" height="600" alt="Patient_200_Arrythmia" src="https://github.com/user-attachments/assets/aab372d3-223c-4d63-86b0-e01cb7ac0c25" />
+<img width="1200" height="600" alt="Patient_200_Arrythmia"
+src="https://github.com/user-attachments/assets/aab372d3-223c-4d63-86b0-e01cb7ac0c25" />
 
 
 Temporal Precision: The jitter-based encoder achieves >95% temporal alignment with cardiologist annotations.
-
 Diagnostic Logic: Priority-based heuristic minimizes false positives by prioritizing the high-specificity "Healthy" population.
 
    

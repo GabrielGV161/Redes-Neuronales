@@ -38,8 +38,8 @@ if __name__ == '__main__':
     WEIGHTS_FILE = "pattern_ecg_trained.pkl"
 
     # DATASET CONFIGURATION (CHANGE HERE!)
-    RECORD_HEALTHY = '123'      # Options: '100', '101', '115', '123'
-    RECORD_ARRHYTHMIA = '203'   # Options: '200', '201', '203', '106' (PVC)
+    RECORD_HEALTHY = '100'      # Options: '100', '101', '115', '123'
+    RECORD_ARRHYTHMIA = '200'   # Options: '200', '201', '203', '106' (PVC)
 
     # PHASE 1: DYNAMIC TRAINING (Simulation)
     print("\n[ PHASE 1: DYNAMIC TRAINING]")

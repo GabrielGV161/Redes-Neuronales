@@ -132,7 +132,7 @@ def build_network(n_input=90, n_output=10, spike_indices=None, spike_times=None,
     # Añadimos los monitores (solo los que existen)
     net_objects.extend(monitors_list)
 
-    net = b2.Network(net_objects)
+    net = b2.Network(net_objects) nnn
 
     return {
         'net': net,

@@ -197,31 +197,31 @@ if __name__ == '__main__':
     loader = RealECGLoader(n_input=TOTAL_NEURONAS_INPUT)
     
     # --- CASO A: PACIENTE SANO ---
-    print("\n🏥 Cargando Paciente Sano (MIT-BIH 101)...")
+    print("\n🏥 Cargando Paciente Sano (MIT-BIH 115)...")
     # 1. Recuperamos la señal cruda para pintar
-    raw_signal_100, _, fs_100 = loader.load_mit_bih_data('101', duration_sec=DURACION_TEST/b2.second)
+    raw_signal_100, _, fs_100 = loader.load_mit_bih_data('115', duration_sec=DURACION_TEST/b2.second)
     # 2. Generamos los spikes
     indices_healthy, times_healthy = loader.ecg_to_spikes(
-        input_data='100', 
+        input_data='115', 
         duration_sec=DURACION_TEST/b2.second
     )
-    loader.validate_detection(times_healthy/b2.second, '101')
+    loader.validate_detection(times_healthy/b2.second, '115')
     # 3. ¡PINTAMOS LA VALIDACIÓN! 🖌️
     from src.visualization import plot_ecg_validation
-    plot_ecg_validation(raw_signal_100, fs_100, times_healthy, title="Validación Paciente 101 (Sano)")
+    plot_ecg_validation(raw_signal_100, fs_100, times_healthy, title="Validación Paciente 115 (Sano)")
     
     
     # --- CASO B: PACIENTE ARRÍTMICO ---
-    print("💔 Cargando Paciente Arrítmico (MIT-BIH 201)...")
-    raw_signal_200, _, fs_200 = loader.load_mit_bih_data('201', duration_sec=DURACION_TEST/b2.second)
+    print("💔 Cargando Paciente Arrítmico (MIT-BIH 203)...")
+    raw_signal_200, _, fs_200 = loader.load_mit_bih_data('203', duration_sec=DURACION_TEST/b2.second)
     
     indices_arrhythmia, times_arrhythmia = loader.ecg_to_spikes(
-        input_data='200', 
+        input_data='203', 
         duration_sec=DURACION_TEST/b2.second
     )
-    loader.validate_detection(times_arrhythmia/b2.second, '201')
+    loader.validate_detection(times_arrhythmia/b2.second, '203')
     
-    plot_ecg_validation(raw_signal_200, fs_200, times_arrhythmia, title="Validación Paciente 201 (Arritmia)")
+    plot_ecg_validation(raw_signal_200, fs_200, times_arrhythmia, title="Validación Paciente 203 (Arritmia)")
     
 # 6. Ejecutar test
     print("\n🩺 Ejecutando diagnóstico...")

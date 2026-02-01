@@ -1,4 +1,4 @@
-# SNN-Arrhythmia-Detector: Neuromorphic ECG Classification
+# 🫀 SNN-Arrhythmia-Detector: Neuromorphic ECG Classification
 
 ![Python](https://img.shields.io/badge/Python-3.8%2B-blue)
 ![Brian2](https://img.shields.io/badge/Simulator-Brian2-green)
@@ -8,11 +8,11 @@ A bio-inspired **Spiking Neural Network (SNN)** designed to detect cardiac arrhy
 
 ---
 
-## Scientific Abstract
+## 🔬 Scientific Abstract
 
 Standard ECG analysis relies on digital signal processing or heavy deep learning models (CNN/RNN). This project explores a **neuromorphic approach**, encoding analog ECG signals into discrete spike trains. The network employs a competitive **Dual-Population Architecture** with lateral inhibition, where neurons specialize in detecting either synchronous (Healthy) or asynchronous (Arrhythmic) patterns based on the morphological jitter of the QRS complex.
 
-## Key Features
+## 🚀 Key Features
 
 * **Dual-Tau Architecture:** Implements two competing neuronal populations with distinct membrane time constants ($\tau$):
     * **Healthy Team (Low $\tau$):** Acts as a coincidence detector for precise, rhythmic signals.
@@ -21,7 +21,32 @@ Standard ECG analysis relies on digital signal processing or heavy deep learning
 * **Winner-Take-All Competition:** Implements strong lateral inhibition to force decision-making between the diagnostic populations.
 * **Clinical Validation:** Integrated directly with the **MIT-BIH Database** (PhysioNet) to test against real patient records (e.g., Patient 115 vs. Patient 203).
 
-## Project Structure
+## ⚙️ Pipeline Implementation
+
+In this package, we implemented a custom SNN pipeline using **Brian2** for differential equation modeling and **WFDB** for clinical data acquisition. The main components are:
+
+### 1. Analog-to-Spike Encoding (`src/real_ecg_loader.py`)
+Implemented an `ecg_to_spikes` conversion algorithm that transforms continuous voltage signals into temporal spike trains.
+* **Signal Processing:** Utilized `wfdb` to fetch raw annotations and signals from PhysioNet.
+* **Temporal Coding:** Applied a jitter-injection technique to map QRS morphological variance into precise spike timings, critical for the network's plasticity.
+
+### 2. Neuromorphic Architecture (`src/network.py`)
+Designed the core topology using Brian2's `NeuronGroup` and `Synapses` classes.
+* **LIF Model:** Defined the differential equations for **Leaky Integrate-and-Fire** neurons with adaptive thresholds.
+* **Plasticity:** Implemented the **STDP** learning rule, allowing synaptic weights ($w$) to evolve based on the causal relationship ($\Delta t$) between pre- and post-synaptic spikes.
+
+### 3. Inference & Diagnostics (`src/test_recognition.py`)
+Created a deterministic inference engine that freezes the network state for clinical validation.
+* **Simulation Management:** Developed a lightweight `SimResult` class to extract telemetry (voltage/time) from Brian2 monitors without memory overhead.
+* **Diagnostic Logic:** Implemented a comparison function `compare_recognition` that evaluates the firing rates and membrane potentials of the competing populations to issue a diagnosis.
+
+### 4. Persistence Layer (`src/weight_manager.py`)
+Handled the serialization of the trained network state.
+* **Serialization:** Implemented `save_weights` and `load_weights` using `pickle` to store synaptic matrices and topology, stripping physical units for storage efficiency and reconstructing them upon loading.
+
+---
+
+## 📂 Project Structure
 
 ```text
 ├── src/
@@ -34,7 +59,7 @@ Standard ECG analysis relies on digital signal processing or heavy deep learning
 ├── saved_weights/           # Serialized network state (.pkl)
 ├── requirements.txt         # Dependencies
 └── README.md
-
+```
 Installation
 Clone the repository:
 

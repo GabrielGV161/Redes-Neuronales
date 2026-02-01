@@ -12,6 +12,8 @@ Description: Orchestrates the entire lifecycle of the SNN:
 import brian2 as b2
 import numpy as np
 import gc
+vv
+
 
 # CUSTOM MODULES
 from src.network import build_network
